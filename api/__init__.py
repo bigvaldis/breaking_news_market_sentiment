@@ -1,1 +1,1 @@
-"""Flask API for Breaking News & Sentiment Analysis."""
+"""Flask API for News & Market Sentiment Analysis."""

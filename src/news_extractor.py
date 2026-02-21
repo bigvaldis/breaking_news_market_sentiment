@@ -51,7 +51,7 @@ def fetch_rss_feed(source_name: str, url: str) -> list[dict]:
 
 
 def fetch_all_news() -> pd.DataFrame:
-    """Fetch breaking news from all configured RSS feeds."""
+    """Fetch news from all configured RSS feeds."""
     all_articles = []
     for source_name, url in RSS_FEEDS:
         articles = fetch_rss_feed(source_name, url)

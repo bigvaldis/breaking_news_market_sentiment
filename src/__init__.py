@@ -1,1 +1,1 @@
-"""Breaking News and Financial Sentiment Analysis."""
+"""News and Market Sentiment Analysis."""

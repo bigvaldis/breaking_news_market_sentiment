@@ -407,8 +407,8 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header-left">
-          <h1>Breaking News & Sentiment Analysis</h1>
-          <p className="subtitle">Financial market sentiment from breaking news</p>
+          <h1>News & Market Sentiment Analysis</h1>
+          <p className="subtitle">Financial market sentiment from news</p>
         </div>
         <div className="header-right">
           <div className={`api-status ${apiConnected ? 'connected' : 'disconnected'}`}>

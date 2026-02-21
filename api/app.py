@@ -1,4 +1,4 @@
-"""Flask API for Breaking News & Financial Sentiment Analysis."""
+"""Flask API for News & Market Sentiment Analysis."""
 
 import os
 from pathlib import Path

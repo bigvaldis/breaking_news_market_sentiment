@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Breaking News & Financial Sentiment Analysis
+News & Market Sentiment Analysis
 
 Extracts breaking financial news and tracks market sentiment over time.
 """

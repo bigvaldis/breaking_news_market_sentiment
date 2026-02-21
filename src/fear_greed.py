@@ -13,7 +13,7 @@ def fetch_fear_greed() -> dict:
     Returns dict with value (0-100), classification, timestamp, or error.
     """
     try:
-        req = urllib.request.Request(FNG_URL, headers={"User-Agent": "BreakingNews/1.0"})
+        req = urllib.request.Request(FNG_URL, headers={"User-Agent": "NewsMarketSentiment/1.0"})
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
     except Exception as e:

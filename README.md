@@ -1,6 +1,6 @@
-# Breaking News & Market Sentiment Analysis
+# News & Market Sentiment Analysis
 
-> A full-stack financial intelligence dashboard that aggregates breaking news from major financial outlets, performs real-time NLP sentiment analysis, and visualises live market data across S&P 500, Gold, VIX, and Bitcoin.
+> A full-stack financial intelligence dashboard that aggregates news from major financial outlets, performs real-time NLP sentiment analysis, and visualises live market data across S&P 500, Gold, VIX, and Bitcoin.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)](https://flask.palletsprojects.com/)
