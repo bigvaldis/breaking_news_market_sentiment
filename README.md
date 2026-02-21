@@ -1,120 +1,215 @@
-# Breaking News & Financial Sentiment Analysis
+# Breaking News & Market Sentiment Analysis
 
-Extract breaking financial news from multiple sources and track market sentiment over time.
+A full-stack financial sentiment dashboard that aggregates breaking news from multiple sources, analyzes market sentiment using NLP, and correlates it with live market data including S&P 500, Gold, VIX, and Bitcoin.
+
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)](https://flask.palletsprojects.com/)
+
+---
+
+## Overview
+
+This application provides real-time insights into financial market sentiment by:
+
+- **Aggregating** breaking news from Bloomberg, CNBC, Dow Jones, Yahoo Finance, and Reuters
+- **Analyzing** sentiment using VADER (Valence Aware Dictionary and sEntiment Reasoner)
+- **Tracking** sentiment trends over time with historical snapshots
+- **Visualizing** market data via interactive candlestick charts (S&P 500, Gold, VIX)
+- **Monitoring** the Fear & Greed Index and Bitcoin price
+
+---
 
 ## Features
 
-- **News extraction** from RSS feeds (Bloomberg, CNBC, Dow Jones, Yahoo Finance, Reuters) — no API key required
-- **S&P 500 correlation** — correlates news sentiment with S&P 500 returns (same-day and 1-day lag)
-- **Optional NewsAPI** integration for more sources (add `NEWSAPI_KEY` to `.env`)
-- **Sentiment analysis** using VADER (fast, works on CPU)
-- **Historical tracking** — sentiment scores and trends saved to `data/`
-- **Trend detection** — improving, declining, or stable market sentiment
+| Feature | Description |
+|---------|-------------|
+| **News Extraction** | RSS feeds from major financial outlets — no API key required for core sources |
+| **Sentiment Analysis** | VADER-based analysis with positive/negative/neutral classification |
+| **Market Charts** | S&P 500, Gold (spot), and VIX candlestick charts with 90-day history |
+| **Fear & Greed Index** | Crypto market sentiment gauge (Alternative.me) with fuel-gauge visualization |
+| **BTC Tracker** | Real-time Bitcoin price and 1-day change |
+| **Trend Detection** | Improving, declining, or stable sentiment over time |
+| **NewsAPI Integration** | Optional expansion with additional sources (requires API key) |
 
-## Setup
+---
+
+## Tech Stack
+
+- **Backend:** Python 3.10+, Flask, pandas, yfinance, VADER
+- **Frontend:** React 18, Vite, lightweight-charts
+- **Data:** RSS feeds, Yahoo Finance, Alternative.me API
+
+---
+
+## Prerequisites
+
+- Python 3.10 or higher
+- Node.js 18+ (for the web dashboard)
+- pip and npm
+
+---
+
+## Installation
+
+### 1. Clone the repository
 
 ```bash
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Optional: Copy .env.example to .env and add API keys
-cp .env.example .env
+git clone https://github.com/ShaonINT/breaking_news_market_sentiment.git
+cd breaking_news_market_sentiment
 ```
+
+### 2. Backend setup
+
+```bash
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 3. Frontend setup
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 4. Environment (optional)
+
+```bash
+cp .env.example .env
+# Add NEWSAPI_KEY to .env for additional news sources
+```
+
+---
 
 ## Usage
 
-### Run the full pipeline
+### Web application (recommended)
+
+Start both the API and frontend:
+
+```bash
+./start.sh
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+**Manual start (two terminals):**
+
+```bash
+# Terminal 1 — Flask API (port 5001)
+source venv/bin/activate
+python api/app.py
+
+# Terminal 2 — React frontend
+cd frontend && npm run dev
+```
+
+### CLI pipeline
+
+Run the news fetch and sentiment analysis pipeline without the UI:
 
 ```bash
 python main.py
 ```
 
-This will:
-1. Fetch breaking news from RSS feeds (and NewsAPI if configured)
-2. Analyze sentiment of each article
-3. Save news to `data/news_archive.csv`
-4. Append sentiment summary to `data/sentiment_history.json`
-5. Print a market sentiment report
+---
 
-### Use as a module
-
-```python
-from src.news_extractor import fetch_all_news
-from src.sentiment_analyzer import analyze_sentiment_vader, get_market_sentiment_summary
-from src.sentiment_tracker import save_news, append_sentiment_summary, load_sentiment_history
-
-# Fetch and analyze
-df = fetch_all_news()
-df = analyze_sentiment_vader(df)
-summary = get_market_sentiment_summary(df)
-print(summary)  # {'overall_score': 0.12, 'sentiment_label': 'positive', ...}
-```
-
-## Web app (Flask + React)
-
-Run the full-stack app with a dashboard. Requires [Node.js](https://nodejs.org/) for the React frontend.
-
-**Option A – Start both servers:**
-```bash
-chmod +x start.sh
-./start.sh
-```
-
-**Option B – Separate terminals:**
-
-Terminal 1 – Flask API (must run first, uses port 5001 to avoid macOS AirPlay conflict):
-```bash
-source venv/bin/activate
-python api/app.py
-```
-
-Terminal 2 – React frontend:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000). The header shows **API connected** when Flask is running. Click **Fetch Latest News** to run the pipeline.
-
-## Project structure
+## Project Structure
 
 ```
-├── main.py              # CLI entry point
 ├── api/
-│   └── app.py           # Flask API
-├── frontend/            # React (Vite) dashboard
-├── data/                # Created on first run
-└── src/
-    ├── news_extractor.py
-    ├── sentiment_analyzer.py
-    └── sentiment_tracker.py
+│   └── app.py              # Flask REST API
+├── frontend/               # React (Vite) dashboard
+│   ├── src/
+│   │   ├── App.jsx         # Main dashboard
+│   │   ├── Sp500Chart.jsx  # S&P 500 candlestick
+│   │   ├── GoldChart.jsx   # Gold candlestick
+│   │   ├── VixChart.jsx    # VIX candlestick
+│   │   └── ...
+│   └── package.json
+├── src/
+│   ├── news_extractor.py   # RSS & NewsAPI fetching
+│   ├── sentiment_analyzer.py
+│   ├── sentiment_tracker.py
+│   ├── market_data.py      # yfinance (S&P, Gold, VIX, BTC)
+│   └── fear_greed.py       # Alternative.me Fear & Greed API
+├── data/                   # Generated at runtime
+│   ├── news_archive.csv
+│   └── sentiment_history.json
+├── main.py                 # CLI entry point
+├── requirements.txt
+├── render.yaml             # Render deployment config
+├── Dockerfile
+└── DEPLOYMENT.md           # Deployment guide
 ```
+
+---
 
 ## Deployment
 
-**Render (one-click):** Push to GitHub → [Render](https://render.com) → New → Blueprint → Connect repo → Deploy. Uses `render.yaml` + `Dockerfile`.
+### Render (one-click)
 
-See **[DEPLOYMENT.md](DEPLOYMENT.md)** for other options (Railway, Docker, VPS).
+1. Push to GitHub
+2. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**
+3. Connect your repository
+4. Render detects `render.yaml` and deploys automatically
 
-Quick local production run:
+### Other options
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for Railway, Docker, and VPS deployment instructions.
+
+### Local production build
+
 ```bash
 ./deploy.sh
 ```
 
-## Customization
+---
 
-- **Add RSS feeds**: Edit `RSS_FEEDS` in `src/news_extractor.py`
-- **Use NewsAPI**: Get a free key at [newsapi.org](https://newsapi.org) and add to `.env`
-- **FinBERT** (financial-specific): Add `finbert` to requirements and implement in `sentiment_analyzer.py` for domain-tuned sentiment
+## API Endpoints
 
-## Data outputs
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/news` | GET | Latest news archive |
+| `/api/sentiment-summary` | GET | Current sentiment summary |
+| `/api/sentiment-history` | GET | Historical sentiment data |
+| `/api/fear-greed` | GET | Fear & Greed Index |
+| `/api/markets` | GET | S&P 500, Gold, VIX, BTC OHLC |
+| `/api/pipeline/run` | POST | Trigger news fetch & analysis |
+
+---
+
+## Configuration
+
+| Variable | Description |
+|----------|-------------|
+| `NEWSAPI_KEY` | Optional. Get at [newsapi.org](https://newsapi.org) for additional sources |
+| `PORT` | Server port (default: 5001) |
+| `FLASK_DEBUG` | Set to `true` for debug mode |
+
+---
+
+## Data Outputs
 
 | File | Description |
 |------|-------------|
-| `news_archive.csv` | All fetched articles with sentiment scores |
-| `sentiment_history.json` | Timestamped sentiment snapshots for trend analysis |
+| `data/news_archive.csv` | Fetched articles with sentiment scores |
+| `data/sentiment_history.json` | Timestamped sentiment snapshots |
+
+---
+
+## License
+
+MIT
+
+---
+
+## Author
+
+**Shaon Biswas**
+
+Repository: [github.com/ShaonINT/breaking_news_market_sentiment](https://github.com/ShaonINT/breaking_news_market_sentiment)
