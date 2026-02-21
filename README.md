@@ -187,9 +187,24 @@ See **[DEPLOYMENT.md](DEPLOYMENT.md)** for Railway, Docker, and VPS deployment i
 
 | Variable | Description |
 |----------|-------------|
-| `NEWSAPI_KEY` | Optional. Get at [newsapi.org](https://newsapi.org) for additional sources |
 | `PORT` | Server port (default: 5001) |
 | `FLASK_DEBUG` | Set to `true` for debug mode |
+
+### API Keys & Data Sources
+
+| Key | Required | Source | Description |
+|-----|----------|--------|-------------|
+| `NEWSAPI_KEY` | Optional | [newsapi.org](https://newsapi.org) → Get API Key | Additional news sources. Free tier: 100 requests/day. |
+| — | — | RSS feeds (Bloomberg, CNBC, Reuters, etc.) | No key needed |
+| — | — | [Yahoo Finance](https://finance.yahoo.com) (via yfinance) | No key needed — S&P 500, Gold, VIX, BTC |
+| — | — | [Alternative.me](https://alternative.me/crypto/fear-and-greed-index/) | No key needed — Fear & Greed Index |
+
+Add keys to `.env`:
+
+```bash
+cp .env.example .env
+# Edit .env and add: NEWSAPI_KEY=your_key_here
+```
 
 ---
 
