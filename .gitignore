@@ -5,6 +5,7 @@ frontend/dist/
 __pycache__/
 *.pyc
 .env
+auth-token.txt
 data/
 *.egg-info/
 .pytest_cache/
