@@ -341,7 +341,7 @@ export default function App() {
       const res = await fetch(`${API}/pipeline/run`, { method: 'POST' })
       const data = await res.json()
       if (data.error) {
-        setError(data.error === 'no_news' ? 'No news fetched. Check your connection.' : data.message || data.error)
+        setError(data.error === 'no_news' ? 'No news fetched. RSS feeds may be temporarily unavailable.' : data.message || data.error)
       } else {
         setSummary(data)
         await fetchData()
@@ -381,6 +381,13 @@ export default function App() {
     tryConnect()
     return () => { cancelled = true }
   }, [])
+
+  // Auto-fetch news on first load when feed is empty
+  useEffect(() => {
+    if (apiConnected && news.length === 0 && !loading && !error) {
+      runPipeline()
+    }
+  }, [apiConnected, news.length])
 
   // News auto-refresh every 1 hour
   useEffect(() => {
