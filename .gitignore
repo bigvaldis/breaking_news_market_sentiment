@@ -4,7 +4,6 @@ venv/
 node_modules/
 frontend/.vite/
 capture_screenshots.py
-screenshots/
 frontend/dist/
 __pycache__/
 *.pyc
