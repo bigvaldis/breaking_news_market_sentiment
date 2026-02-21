@@ -5,6 +5,7 @@ Extract breaking financial news from multiple sources and track market sentiment
 ## Features
 
 - **News extraction** from RSS feeds (Bloomberg, CNBC, Dow Jones, Yahoo Finance, Reuters) — no API key required
+- **S&P 500 correlation** — correlates news sentiment with S&P 500 returns (same-day and 1-day lag)
 - **Optional NewsAPI** integration for more sources (add `NEWSAPI_KEY` to `.env`)
 - **Sentiment analysis** using VADER (fast, works on CPU)
 - **Historical tracking** — sentiment scores and trends saved to `data/`
@@ -53,19 +54,56 @@ summary = get_market_sentiment_summary(df)
 print(summary)  # {'overall_score': 0.12, 'sentiment_label': 'positive', ...}
 ```
 
+## Web app (Flask + React)
+
+Run the full-stack app with a dashboard. Requires [Node.js](https://nodejs.org/) for the React frontend.
+
+**Option A – Start both servers:**
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+**Option B – Separate terminals:**
+
+Terminal 1 – Flask API (must run first, uses port 5001 to avoid macOS AirPlay conflict):
+```bash
+source venv/bin/activate
+python api/app.py
+```
+
+Terminal 2 – React frontend:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The header shows **API connected** when Flask is running. Click **Fetch Latest News** to run the pipeline.
+
 ## Project structure
 
 ```
-├── main.py              # Entry point - run full pipeline
-├── requirements.txt
-├── .env.example
-├── data/                 # Created on first run
-│   ├── news_archive.csv
-│   └── sentiment_history.json
+├── main.py              # CLI entry point
+├── api/
+│   └── app.py           # Flask API
+├── frontend/            # React (Vite) dashboard
+├── data/                # Created on first run
 └── src/
-    ├── news_extractor.py    # RSS + optional NewsAPI
-    ├── sentiment_analyzer.py # VADER sentiment
-    └── sentiment_tracker.py # Storage & trend tracking
+    ├── news_extractor.py
+    ├── sentiment_analyzer.py
+    └── sentiment_tracker.py
+```
+
+## Deployment
+
+**Render (one-click):** Push to GitHub → [Render](https://render.com) → New → Blueprint → Connect repo → Deploy. Uses `render.yaml` + `Dockerfile`.
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for other options (Railway, Docker, VPS).
+
+Quick local production run:
+```bash
+./deploy.sh
 ```
 
 ## Customization

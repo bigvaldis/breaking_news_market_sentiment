@@ -8,6 +8,12 @@ vaderSentiment>=3.3.2
 # Data handling
 pandas>=2.0.0
 python-dotenv>=1.0.0
+yfinance>=0.2.0
+
+# API
+flask>=3.0.0
+flask-cors>=4.0.0
+gunicorn>=21.0.0
 
 # Optional: FinBERT for financial-specific sentiment (uncomment if needed)
 # transformers>=4.35.0

@@ -1,0 +1,190 @@
+# Deployment Guide
+
+This app can be deployed in several ways. Choose based on your hosting preference.
+
+---
+
+## Option 1: Single Server (VPS, Railway, Render)
+
+Build the React frontend, then run Flask. Flask serves both the API and the built static files.
+
+### Steps
+
+```bash
+# 1. Install dependencies
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+cd frontend
+npm install
+npm run build
+cd ..
+
+# 2. Run with gunicorn (production)
+gunicorn -w 2 -b 0.0.0.0:5001 "api.app:app"
+
+# Or run with Flask dev server (development only)
+python api/app.py
+```
+
+Open `http://localhost:5001`. The app serves the React build at `/` and the API at `/api`.
+
+### Environment variables
+
+| Variable | Description |
+|---------|-------------|
+| `PORT` | Server port (default: 5001) |
+| `NEWSAPI_KEY` | Optional NewsAPI key for more news sources |
+| `FLASK_DEBUG` | Set to `true` for debug mode |
+
+---
+
+## Option 2: Railway
+
+1. Create a [Railway](https://railway.app) project and connect your repo.
+2. Add a **Procfile** (or use the one below).
+3. Set `PORT` (Railway sets this automatically).
+4. Deploy.
+
+**Procfile:**
+```
+web: cd frontend && npm run build && cd .. && gunicorn -w 2 -b 0.0.0.0:$PORT api.app:app
+```
+
+Or use a **build + start** approach:
+
+**railway.json** (optional):
+```json
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "cd frontend && npm run build && cd .. && gunicorn -w 2 -b 0.0.0.0:$PORT api.app:app",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
+```
+
+**nixpacks.toml** (if using Nixpacks):
+```toml
+[phases.setup]
+nixPkgs = ["python312", "nodejs_20"]
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "cd frontend && npm install"
+]
+
+[phases.build]
+cmds = ["cd frontend && npm run build"]
+
+[start]
+cmd = "gunicorn -w 2 -b 0.0.0.0:$PORT api.app:app"
+```
+
+---
+
+## Option 3: Render (recommended)
+
+The repo includes `render.yaml` for one-click deploy.
+
+### Deploy steps
+
+1. Push your code to **GitHub**.
+2. Go to [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**.
+3. Connect your GitHub repo (the one containing this project).
+4. Render will detect `render.yaml` and create the web service.
+5. Click **Apply** to deploy.
+6. (Optional) Add `NEWSAPI_KEY` in **Environment** for more news sources.
+
+Your app will be live at `https://<your-service>.onrender.com`.
+
+### Manual setup (if not using Blueprint)
+
+1. **New** → **Web Service**.
+2. Connect your repo.
+3. **Build Command:** `pip install -r requirements.txt && cd frontend && npm install && npm run build`
+4. **Start Command:** `gunicorn -w 2 -b 0.0.0.0:$PORT api.app:app`
+5. Deploy.
+
+---
+
+## Option 4: Docker
+
+**Dockerfile:**
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install Node for frontend build
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# App
+COPY . .
+
+# Build frontend
+RUN cd frontend && npm install && npm run build && cd ..
+
+EXPOSE 5001
+ENV PORT=5001
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5001", "api.app:app"]
+```
+
+**Build and run:**
+```bash
+docker build -t breaking-news-sentiment .
+docker run -p 5001:5001 breaking-news-sentiment
+```
+
+---
+
+## Option 5: Separate Frontend + Backend
+
+Deploy the Flask API to one host (e.g. Railway) and the React app to another (e.g. Vercel).
+
+1. **Backend:** Deploy `api/app.py` as above. Do **not** build the frontend. Get the API URL (e.g. `https://your-api.railway.app`).
+
+2. **Frontend:** Set the API base URL at build time:
+   ```bash
+   cd frontend
+   VITE_API_URL=https://your-api.railway.app npm run build
+   ```
+   Then update `App.jsx` to use `import.meta.env.VITE_API_URL || '/api'` for the API constant, and configure your host to use that env var.
+
+3. **CORS:** The Flask app has CORS enabled. If your frontend is on a different domain, ensure `flask-cors` allows your frontend origin (it currently allows all with `CORS(app)`).
+
+---
+
+## Data persistence
+
+The app writes to `data/` (news archive, sentiment history). For production:
+
+- **Railway/Render:** Use a persistent disk or external storage (e.g. S3) if you need data to survive restarts.
+- **Docker:** Mount a volume for `./data` if you want to persist:
+  ```bash
+  docker run -p 5001:5001 -v $(pwd)/data:/app/data breaking-news-sentiment
+  ```
+
+---
+
+## Quick deploy script
+
+```bash
+#!/bin/bash
+# deploy.sh - Build and run for production
+set -e
+cd "$(dirname "$0")"
+pip install -r requirements.txt
+cd frontend && npm install && npm run build && cd ..
+echo "Build complete. Starting server..."
+gunicorn -w 2 -b 0.0.0.0:${PORT:-5001} api.app:app
+```

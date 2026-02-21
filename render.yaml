@@ -1,0 +1,12 @@
+# Render Blueprint - One-click deploy
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: breaking-news-sentiment
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+
+    envVars:
+      - key: NEWSAPI_KEY
+        sync: false  # Add manually in Render dashboard if desired
