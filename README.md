@@ -24,14 +24,6 @@ Built as a full-stack application with a Flask REST API backend and a React 18 /
 
 ---
 
-## Screenshots
-
-| Dashboard |
-|-----------|
-| ![Dashboard](screenshots/dashboard.png) |
-
----
-
 ## Features
 
 - **Zero-dependency news ingestion** — RSS feeds from Bloomberg, CNBC, Reuters, Yahoo Finance, and Dow Jones; no API key required

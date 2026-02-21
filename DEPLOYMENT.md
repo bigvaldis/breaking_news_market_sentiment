@@ -203,17 +203,3 @@ The app writes to `data/` (news archive, sentiment history). For production:
   docker run -p 5001:5001 -v $(pwd)/data:/app/data breaking-news-sentiment
   ```
 
----
-
-## Quick deploy script
-
-```bash
-#!/bin/bash
-# deploy.sh - Build and run for production
-set -e
-cd "$(dirname "$0")"
-pip install -r requirements.txt
-cd frontend && npm install && npm run build && cd ..
-echo "Build complete. Starting server..."
-gunicorn -w 2 -b 0.0.0.0:${PORT:-5001} api.app:app
-```
