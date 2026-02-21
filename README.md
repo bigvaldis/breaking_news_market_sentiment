@@ -8,7 +8,7 @@
 [![Vite](https://img.shields.io/badge/Vite-5.x-646cff.svg)](https://vitejs.dev/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ed.svg)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-46e3b7.svg)](https://news-sentiment.imshaon.com/)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-news--sentiment.imshaon.com-46e3b7.svg)](https://news-sentiment.imshaon.com/)
 
 **🔗 Live Demo:** [news-sentiment.imshaon.com](https://news-sentiment.imshaon.com/)
 
@@ -18,7 +18,9 @@
 
 This project bridges financial news aggregation and market sentiment intelligence. It continuously pulls articles from Bloomberg, CNBC, Reuters, Yahoo Finance, and Dow Jones via RSS (no API key required), processes them through a VADER NLP sentiment pipeline, and surfaces actionable signals — bullish, bearish, or neutral — alongside live market charts and a real-time Fear & Greed Index.
 
-Built as a full-stack application with a Flask REST API backend and a React 18 frontend, the system is containerised with Docker and deployed to Render via `render.yaml` blueprint.
+Each article is scored on the concatenation of its headline and summary, not the headline alone — improving classification accuracy for terse financial titles. Sentiment history is persisted as a rolling 500-snapshot JSON file, and trend detection uses a half-split algorithm on the most recent 24 snapshots to classify trajectory as improving, declining, or stable.
+
+Built as a full-stack application with a Flask REST API backend and a React 18 / Vite 5 frontend, the system is containerised with Docker and deployed to Render via `render.yaml` blueprint.
 
 ---
 
@@ -32,14 +34,16 @@ Built as a full-stack application with a Flask REST API backend and a React 18 f
 
 ## Features
 
-- **News aggregation** — RSS feeds from Bloomberg, CNBC, Reuters, Yahoo Finance, and Dow Jones with zero API dependency
-- **NLP sentiment analysis** — VADER-based positive / negative / neutral classification with confidence scoring
-- **Trend detection** — Automatically classifies sentiment trajectory as improving, declining, or stable over time
-- **Interactive market charts** — Candlestick charts for S&P 500, Gold, and VIX with 90-day historical data powered by yfinance
-- **Fear & Greed Index** — Live crypto market sentiment gauge via Alternative.me API
-- **BTC tracker** — Real-time Bitcoin price with 24-hour change indicator
-- **Optional NewsAPI integration** — Expand news sources with a free NewsAPI key
-- **REST API** — Clean, documented endpoints for programmatic access to all data
+- **Zero-dependency news ingestion** — RSS feeds from Bloomberg, CNBC, Reuters, Yahoo Finance, and Dow Jones; no API key required
+- **NLP sentiment pipeline** — VADER classification (positive / negative / neutral) with compound scoring on headline + summary concatenation
+- **Percentage breakdown** — Per-run positive / negative / neutral article distribution, not just a mean score
+- **Trend detection** — Half-split algorithm classifies sentiment trajectory as improving, declining, or stable over the last 24 snapshots
+- **Persistent history** — CSV news archive (deduplicated on title + source + URL) and rolling 500-snapshot JSON sentiment history
+- **Interactive market charts** — Financial-grade candlestick charts for S&P 500, Gold, and VIX with 90-day OHLC data via lightweight-charts
+- **Fear & Greed Index** — Live crypto market sentiment gauge via Alternative.me (zero extra dependencies — uses stdlib `urllib.request`)
+- **BTC tracker** — Real-time Bitcoin price with 90-day OHLC history
+- **Correlation engine** — Same-day and lag-1 Pearson correlation between sentiment time series and S&P 500 daily returns
+- **Optional NewsAPI integration** — Expand news sources with a free NewsAPI key; `[Removed]` articles automatically filtered
 
 ---
 
@@ -49,12 +53,13 @@ Built as a full-stack application with a Flask REST API backend and a React 18 f
 |-------|------------|
 | Backend | Python 3.10+, Flask 3.0 |
 | NLP | VADER (vaderSentiment) |
-| Market Data | yfinance, Alternative.me API |
+| Market Data | yfinance (S&P 500, Gold, VIX, BTC) |
+| Fear & Greed | Alternative.me API (via stdlib `urllib.request`) |
 | News Ingestion | feedparser (RSS), NewsAPI (optional) |
-| Frontend | React 18, Vite, lightweight-charts |
-| Styling | CSS |
+| Frontend | React 18.3, Vite 5.4 |
+| Charts | lightweight-charts 4.2 |
 | Containerisation | Docker |
-| Deployment | Render (render.yaml blueprint) |
+| Deployment | Render (`render.yaml` blueprint) |
 
 ---
 
@@ -64,21 +69,29 @@ Built as a full-stack application with a Flask REST API backend and a React 18 f
 ┌──────────────────────────────────────────────────────┐
 │                    React Frontend                     │
 │   App.jsx → Sp500Chart / GoldChart / VixChart        │
+│   Vite 5 build → served by Flask in production       │
 └───────────────────────┬──────────────────────────────┘
-                        │ HTTP (REST API)
+                        │ HTTP REST
 ┌───────────────────────▼──────────────────────────────┐
-│                   Flask REST API                     │
+│                   Flask REST API                      │
 │                   api/app.py                          │
-└───┬───────────────────┬──────────────────────────────┘
-    │                   │
-┌───▼───────┐   ┌───────▼──────────────────────────────┐
-│  src/     │   │  External Data Sources               │
-│  news_    │   │  RSS: Bloomberg, CNBC, Reuters,      │
-│  extractor│   │  Yahoo Finance, Dow Jones            │
-│  .py      │   │  Market: yfinance (S&P500, Gold, VIX)│
-│           │   │  Crypto: Alternative.me Fear & Greed │
-│  sentiment│   └──────────────────────────────────────┘
-│  _analyzer│
+│   CORS enabled · Cache-Control on market endpoints   │
+│   Static file serving with API route guard           │
+└───┬──────────────┬────────────────────────────────────┘
+    │              │
+┌───▼──────┐  ┌────▼──────────────────────────────────┐
+│  src/    │  │  External Data Sources                 │
+│          │  │  RSS: Bloomberg, CNBC, Reuters,        │
+│  news_   │  │       Yahoo Finance, Dow Jones         │
+│  extract │  │  Market: yfinance (sequential fetch)  │
+│  or.py   │  │  Crypto: Alternative.me Fear & Greed  │
+│          │  └───────────────────────────────────────┘
+│  sentiment│
+│  _analyze │  ┌───────────────────────────────────────┐
+│  r.py     │  │  data/                                │
+│           │  │  news_archive.csv   (deduplicated)    │
+│  sentiment│  │  sentiment_history.json (500 rolling) │
+│  _tracker │  └───────────────────────────────────────┘
 │  .py      │
 │           │
 │  market_  │
@@ -97,44 +110,56 @@ Built as a full-stack application with a Flask REST API backend and a React 18 f
 breaking_news_market_sentiment/
 │
 ├── api/
-│   └── app.py                  # Flask REST API — all endpoints
+│   └── app.py                  # Flask REST API — all endpoints, static serving, API route guard
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx             # Main dashboard component
-│   │   ├── Sp500Chart.jsx      # S&P 500 candlestick chart
-│   │   ├── GoldChart.jsx       # Gold candlestick chart
-│   │   └── VixChart.jsx        # VIX volatility chart
-│   └── package.json
+│   │   ├── App.jsx             # Main dashboard component & API orchestration
+│   │   ├── Sp500Chart.jsx      # S&P 500 candlestick chart (lightweight-charts)
+│   │   ├── GoldChart.jsx       # Gold candlestick chart (lightweight-charts)
+│   │   └── VixChart.jsx        # VIX volatility chart (lightweight-charts)
+│   └── package.json            # React 18.3, Vite 5.4, lightweight-charts 4.2
 │
 ├── src/
-│   ├── news_extractor.py       # RSS feed ingestion & parsing
-│   ├── sentiment_analyzer.py   # VADER NLP sentiment pipeline
-│   ├── sentiment_tracker.py    # Historical sentiment tracking & trend detection
-│   ├── market_data.py          # yfinance market data fetcher
-│   └── fear_greed.py           # Alternative.me Fear & Greed Index
+│   ├── news_extractor.py       # RSS ingestion; 20 articles/source; summary truncated at 500 chars; dual deduplication
+│   ├── sentiment_analyzer.py   # VADER NLP; headline+summary concat; percentage breakdown aggregation
+│   ├── sentiment_tracker.py    # CSV archive; JSON history (500-snapshot cap); half-split trend detection
+│   ├── market_data.py          # yfinance OHLC; threading lock; MultiIndex handling; Pearson correlation engine
+│   └── fear_greed.py           # Alternative.me API via urllib.request; safe int cast; User-Agent header
 │
-├── main.py                     # CLI pipeline runner
-├── Dockerfile                  # Container definition
+├── main.py                     # CLI pipeline runner (dual-mode: library function + standalone CLI)
+├── Dockerfile
 ├── render.yaml                 # Render deployment blueprint
 ├── requirements.txt
 ├── .env.example
-└── DEPLOYMENT.md               # Extended deployment options
+└── DEPLOYMENT.md
 ```
 
 ---
 
 ## API Reference
 
+### Core endpoints
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check — confirms API is running |
-| `/api/news` | GET | Latest aggregated news articles |
-| `/api/sentiment-summary` | GET | Current overall sentiment (bullish / bearish / neutral) |
-| `/api/sentiment-history` | GET | Historical sentiment time series |
+| `/api/news` | GET | Latest 100 articles from archive, sorted by publish date |
+| `/api/sentiment-summary` | GET | Latest sentiment snapshot with trend signal and percentage breakdown |
+| `/api/sentiment-history` | GET | Full sentiment time series for charting |
 | `/api/fear-greed` | GET | Live Fear & Greed Index value and classification |
-| `/api/markets` | GET | S&P 500, Gold, VIX, and BTC OHLC data |
-| `/api/pipeline/run` | POST | Trigger a fresh news fetch and sentiment analysis cycle |
+| `/api/markets` | GET | S&P 500, Gold, VIX, and BTC OHLC — fetched sequentially to prevent yfinance data mix-up |
+| `/api/pipeline/run` | POST | Trigger fresh ingestion, analysis, and persistence cycle |
+
+### Per-asset endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/markets/sp500` | GET | S&P 500 OHLC only |
+| `/api/markets/gold` | GET | Gold OHLC only |
+| `/api/markets/vix` | GET | VIX data only |
+
+> All market and fear-greed endpoints return `Cache-Control: no-store, no-cache, must-revalidate` to prevent stale financial data from CDN or browser caching layers.
 
 ---
 
@@ -203,6 +228,14 @@ python api/app.py
 
 Open **http://localhost:5001**
 
+#### Run pipeline from CLI
+
+```bash
+python main.py
+```
+
+Prints a formatted sentiment report to stdout. Useful for cron scheduling, testing without the web server, or integrating into external workflows.
+
 ---
 
 ## Deployment
@@ -220,7 +253,7 @@ Your app will be live at `https://<your-service>.onrender.com`
 
 ```bash
 docker build -t breaking-news-sentiment .
-docker run -p 5001:5001 -e PORT=5001 breaking-news-sentiment
+docker run -p 5001:5001 breaking-news-sentiment
 ```
 
 For Koyeb, Railway, or VPS deployment, see [DEPLOYMENT.md](DEPLOYMENT.md).
@@ -232,14 +265,35 @@ For Koyeb, Railway, or VPS deployment, see [DEPLOYMENT.md](DEPLOYMENT.md).
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | No | Server port (default: `5001`) |
-| `NEWSAPI_KEY` | No | Free API key from [newsapi.org](https://newsapi.org) for additional news sources |
+| `NEWSAPI_KEY` | No | Free API key from [newsapi.org](https://newsapi.org) for expanded news coverage |
+| `FLASK_DEBUG` | No | Set to `true` to enable Flask debug mode |
+
+---
+
+## Key Design Decisions
+
+**Why RSS over a commercial news API?**
+RSS is free, zero-dependency, and updates in near-real-time. Every major financial publisher maintains active feeds. No registration or API key required — the system works immediately in any environment.
+
+**Why VADER over FinBERT?**
+No GPU, no model download, no inference latency. For a real-time pipeline processing dozens of articles per cycle, the speed trade-off is significant. The modular architecture allows a drop-in NLP engine replacement without changing the API contract or the frontend.
+
+**Why headline + summary concatenation?**
+Financial headlines are often terse and ambiguous in isolation ("Fed acts" could be bullish or bearish). Appending the article summary significantly improves classification accuracy without any additional model complexity.
+
+**Why sequential yfinance fetching?**
+Concurrent requests to yfinance introduce a caching bug where multiple assets return the same data. The combined `/api/markets` endpoint fetches each asset sequentially — slower, but reliably correct.
+
+**Why `urllib.request` for Fear & Greed?**
+Avoids adding `requests` as a dependency for a single API call. The standard library handles it cleanly, keeping the external dependency surface minimal.
 
 ---
 
 ## Roadmap
 
 - [ ] Upgrade sentiment engine to FinBERT (transformer-based financial NLP)
-- [ ] Add per-asset sentiment tracking (e.g. sentiment correlated to S&P 500 movements)
+- [ ] Per-asset sentiment tracking correlated to individual price movements
+- [ ] Statistical significance testing on correlation engine (Spearman rank + p-values)
 - [ ] WebSocket support for real-time sentiment push updates
 - [ ] Alert system — email / Slack notifications on extreme sentiment shifts
 - [ ] Sentiment backtesting against historical price data
@@ -254,10 +308,8 @@ Contributions are welcome. Please open an issue to discuss changes before submit
 
 ## License
 
-MIT
+MIT © [Shaon Biswas](https://github.com/ShaonINT)
 
 ---
-
-**[Shaon Biswas](https://www.linkedin.com/in/shaonbiswas/)** — [GitHub](https://github.com/ShaonINT/breaking_news_market_sentiment)
 
 *Built with Python, Flask, React, and a passion for making financial intelligence accessible.*
