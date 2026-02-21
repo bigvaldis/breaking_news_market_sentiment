@@ -11,7 +11,7 @@ This app can be deployed in several ways. Choose based on your hosting preferenc
 | **Render Free** | $0 | 750 hrs/month. Spins down after 15 min idle (cold start ~1 min). Use **Free** plan, not Professional. |
 | **Koyeb** | $0 | 1 free web service, 512MB RAM. Docker support. No credit card. [koyeb.com](https://www.koyeb.com) |
 | **Railway** | ~$0–1/mo | $5 free credit (30 days), then $1/month free credits. [railway.app](https://railway.app) |
-| **Fly.io** | $5/mo min | After trial. Good if you need always-on. [fly.io](https://fly.io) |
+| **Fly.io** | $5/mo min | After trial. Good if you need always-on. [fly.io](https://fly.io) — see Option 6 below |
 | **PythonAnywhere** | $0 | Python-only. Build React locally, deploy Flask + static files. [pythonanywhere.com](https://www.pythonanywhere.com) |
 
 **Tip:** On Render, create a **Web Service** (not under a paid team). The free tier is available — avoid upgrading to the $19 Professional plan unless you need team features.
@@ -177,7 +177,49 @@ docker run -p 5001:5001 breaking-news-sentiment
 
 ---
 
-## Option 6: Separate Frontend + Backend
+## Option 6: Fly.io
+
+The repo includes `fly.toml` for Fly.io deployment. **Requires Fly CLI and a paid plan** ($5/mo minimum after trial).
+
+### Install Fly CLI
+
+```bash
+# macOS/Linux
+curl -L https://fly.io/install.sh | sh
+
+# Or with Homebrew
+brew install flyctl
+```
+
+### Deploy
+
+```bash
+# First time: create app and deploy (requires fly auth login)
+fly launch --no-deploy   # Review fly.toml, then:
+fly deploy
+
+# Subsequent deploys
+fly deploy
+```
+
+### First-time setup
+
+1. Sign up at [fly.io](https://fly.io)
+2. Run `fly auth login`
+3. Run `fly launch` — it will create the app and prompt for region
+4. Run `fly deploy` to build and deploy
+
+Your app will be at `https://breaking-news-sentiment.fly.dev` (or your chosen app name).
+
+### Optional: set secrets
+
+```bash
+fly secrets set NEWSAPI_KEY=your_key_here
+```
+
+---
+
+## Option 7: Separate Frontend + Backend
 
 Deploy the Flask API to one host (e.g. Railway) and the React app to another (e.g. Vercel).
 
