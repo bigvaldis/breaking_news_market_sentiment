@@ -7,6 +7,8 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
 
+    healthCheckPath: /api/health
+
     envVars:
       - key: NEWSAPI_KEY
         sync: false  # Add manually in Render dashboard if desired

@@ -15,6 +15,6 @@ COPY . .
 # Build frontend
 RUN cd frontend && npm install && npm run build && cd ..
 
-EXPOSE 8080
-ENV PORT=8080
+EXPOSE 10000
+ENV PORT=10000
 CMD gunicorn -w 2 -b 0.0.0.0:${PORT} api.app:app

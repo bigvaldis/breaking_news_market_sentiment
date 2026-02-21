@@ -333,7 +333,10 @@ export default function App() {
       setLastUpdated(new Date())
     } catch (e) {
       setApiConnected(false)
-      setError('Could not reach API. Start the backend: ./start.sh or run python api/app.py in a separate terminal.')
+      const isDeployed = typeof window !== 'undefined' && !window.location.hostname.match(/^localhost|127\.0\.0\.1$/)
+      setError(isDeployed
+        ? 'Service is starting up. Please wait 30–60 seconds and refresh.'
+        : 'Could not reach API. Start the backend: ./start.sh or run python api/app.py in a separate terminal.')
     }
   }
 
