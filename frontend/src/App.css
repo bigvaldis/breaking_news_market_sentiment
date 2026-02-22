@@ -719,6 +719,13 @@
   color: var(--accent);
 }
 
+.corr-markets-note {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin: 0.35rem 0 0;
+  opacity: 0.9;
+}
+
 .corr-period-tabs {
   display: flex;
   gap: 0.35rem;

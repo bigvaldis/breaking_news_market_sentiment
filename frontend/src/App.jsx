@@ -362,6 +362,9 @@ function CorrelationMatrix({ apiBase }) {
             {total_days} day(s) of data
             {days_available > 0 && <> &middot; {days_available} in selected period</>}
           </p>
+          <p className="corr-markets-note">
+            Markets: S&P 500, Gold (XAU), VIX, BTC, Crypto Fear & Greed, Wall Street Fear & Greed
+          </p>
         </div>
       </div>
 
