@@ -80,12 +80,18 @@ CORS(app)
 
 def run_pipeline(use_news_api: bool = False) -> dict:
     """Run news pipeline: fetch, filter, analyze, save. Runs every hour."""
+    df = fetch_all_news()
+
     if use_news_api and os.getenv("NEWSAPI_KEY"):
-        df = fetch_news_api(os.getenv("NEWSAPI_KEY"))
-        if df.empty:
-            df = fetch_all_news()
-    else:
-        df = fetch_all_news()
+        try:
+            api_df = fetch_news_api(os.getenv("NEWSAPI_KEY"))
+            if not api_df.empty:
+                df = pd.concat([df, api_df], ignore_index=True)
+                df = df.drop_duplicates(subset=["title", "source"], keep="first")
+                df = df.sort_values("published_at", ascending=False).reset_index(drop=True)
+                print(f"[Pipeline] Combined RSS ({len(df) - len(api_df)}) + NewsAPI ({len(api_df)}) articles")
+        except Exception as e:
+            print(f"[Pipeline] NewsAPI failed (non-fatal): {e}")
 
     if df.empty:
         return {"error": "no_news"}
@@ -181,10 +187,21 @@ def _clean_for_json(obj):
 
 @app.route("/api/news")
 def get_news():
-    """Get latest news from archive."""
+    """Get latest news — only articles from the last 24h (fallback 48h)."""
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
     df = load_news(DATA_DIR)
-    df = df.sort_values("published_at", ascending=False).head(100)
-    records = df_to_news_list(df)
+    if df.empty:
+        return jsonify({"news": []})
+
+    df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
+    now = _dt.now(_tz.utc)
+
+    fresh = df[df["published_at"] >= now - _td(hours=24)]
+    if len(fresh) < 5:
+        fresh = df[df["published_at"] >= now - _td(hours=48)]
+
+    fresh = fresh.sort_values("published_at", ascending=False).head(100)
+    records = df_to_news_list(fresh)
     records = [r for r in records if r.get("title")]
     for r in records:
         if not r.get("news_type"):
