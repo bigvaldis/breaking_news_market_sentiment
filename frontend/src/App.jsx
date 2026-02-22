@@ -66,13 +66,17 @@ function TrendBadge({ trend }) {
 function formatTimeAgo(dateStr) {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return '—'
   const now = new Date()
   const diffMs = now - d
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  if (diffMins < 1) return 'just now'
   if (diffMins < 60) return `${diffMins} min ago`
   if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
-  return d.toLocaleDateString()
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+  return d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 function NewsList({ news }) {

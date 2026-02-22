@@ -101,7 +101,8 @@ def df_to_news_list(df):
     df = df.copy()
     for col in ["published_at", "fetched_at"]:
         if col in df.columns:
-            df[col] = df[col].astype(str)
+            s = pd.to_datetime(df[col], utc=True, errors="coerce")
+            df[col] = s.apply(lambda x: x.strftime("%Y-%m-%dT%H:%M:%SZ") if pd.notna(x) else None)
     records = df.to_dict(orient="records")
     for r in records:
         for k in list(r.keys()):
