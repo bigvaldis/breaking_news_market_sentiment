@@ -77,7 +77,7 @@ function formatTimestamp(dateStr) {
   return `${dd}-${mm}-${yyyy} ${hh}:${min}:${ss} GMT`
 }
 
-function NewsList({ news }) {
+function NewsList({ news, hasMore, loadingMore, onLoadMore, total }) {
   if (!news?.length) return <p className="empty">No news yet. Run the pipeline to fetch articles.</p>
   const sentimentEmoji = (label) => {
     if (label === 'positive') return '😊'
@@ -97,7 +97,7 @@ function NewsList({ news }) {
           </tr>
         </thead>
         <tbody>
-          {news.slice(0, 30).map((article, i) => (
+          {news.map((article, i) => (
             <tr key={i}>
               <td>
                 <a href={article.url || '#'} target="_blank" rel="noopener noreferrer" className="news-title">
@@ -119,6 +119,13 @@ function NewsList({ news }) {
           ))}
         </tbody>
       </table>
+      {hasMore && (
+        <div className="load-more-wrap">
+          <button className="load-more-btn" onClick={onLoadMore} disabled={loadingMore}>
+            {loadingMore ? 'Loading...' : `Load More (${news.length} of ${total})`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -603,6 +610,10 @@ function CorrelationMatrix({ apiBase }) {
 export default function App() {
   const [summary, setSummary] = useState(null)
   const [news, setNews] = useState([])
+  const [newsPage, setNewsPage] = useState(1)
+  const [newsTotal, setNewsTotal] = useState(0)
+  const [newsHasMore, setNewsHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [history, setHistory] = useState([])
   const [fearGreed, setFearGreed] = useState(null)
   const [wallStreetFearGreed, setWallStreetFearGreed] = useState(null)
@@ -612,16 +623,6 @@ export default function App() {
   const [apiConnected, setApiConnected] = useState(false)
   const [lastUpdated, setLastUpdated] = useState(null)
   const markets = useMarkets()
-
-  const fetchNews = async () => {
-    try {
-      const res = await fetch(`${API}/news`)
-      const data = await res.json()
-      setNews(data.news || [])
-    } catch {
-      /* ignore */
-    }
-  }
 
   const fetchWithTimeout = (url, ms = 8000) => {
     const c = new AbortController()
@@ -636,7 +637,7 @@ export default function App() {
     setError(null)
 
     const results = await Promise.allSettled([
-      fetch(`${API}/news`, { cache: 'no-store' }),
+      fetch(`${API}/news?page=1&per_page=30`, { cache: 'no-store' }),
       fetch(`${API}/sentiment-summary`),
       fetch(`${API}/sentiment-history`),
       fetchWithTimeout(`${API}/fear-greed`, 6000).catch(() => ({ ok: false })),
@@ -649,11 +650,31 @@ export default function App() {
     const fgData = fgRes?.ok ? await fgRes.json() : {}
     const wsFgData = wsFgRes?.ok ? await wsFgRes.json() : {}
     setNews(newsData.news || [])
+    setNewsPage(1)
+    setNewsTotal(newsData.total || 0)
+    setNewsHasMore(newsData.has_more || false)
     setSummary(sum)
     setHistory(histData.history || [])
     setFearGreed(fgData)
     setWallStreetFearGreed(wsFgData)
     setLastUpdated(new Date())
+  }
+
+  const loadMoreNews = async () => {
+    const nextPage = newsPage + 1
+    setLoadingMore(true)
+    try {
+      const res = await fetch(`${API}/news?page=${nextPage}&per_page=30`)
+      const data = await res.json()
+      setNews((prev) => [...prev, ...(data.news || [])])
+      setNewsPage(nextPage)
+      setNewsTotal(data.total || 0)
+      setNewsHasMore(data.has_more || false)
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingMore(false)
+    }
   }
 
   const runPipeline = async () => {
@@ -847,8 +868,14 @@ export default function App() {
         </section>
 
         <section className="news-section">
-          <h2>Latest News</h2>
-          <NewsList news={news} />
+          <h2>Latest News {newsTotal > 0 && <span className="news-count">({newsTotal} articles)</span>}</h2>
+          <NewsList
+            news={news}
+            hasMore={newsHasMore}
+            loadingMore={loadingMore}
+            onLoadMore={loadMoreNews}
+            total={newsTotal}
+          />
         </section>
       </main>
 

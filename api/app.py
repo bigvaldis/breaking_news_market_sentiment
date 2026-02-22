@@ -111,18 +111,35 @@ def run_pipeline(use_news_api: bool = False) -> dict:
 
 
 def _run_daily_snapshot():
-    """Collect daily tracker snapshot for ML/correlation after market close."""
+    """Collect daily tracker snapshot after market close.
+
+    Recomputes sentiment from ALL articles published in the full trading day
+    window (previous day 21:00 UTC through today 21:30 UTC), which covers
+    overnight, premarket (4 AM ET), regular hours, and after-hours.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
     try:
-        history = load_sentiment_history(DATA_DIR)
-        if not history:
-            print("[Daily snapshot] No sentiment history yet, skipping.")
+        df = load_news(DATA_DIR)
+        if df.empty or "sentiment_compound" not in df.columns:
+            print("[Daily snapshot] No analyzed news yet, skipping.")
             return
 
-        df = load_news(DATA_DIR)
-        summary = history[-1]
-        news_df = df if not df.empty and "sentiment_compound" in df.columns else None
-        snapshot = collect_daily_snapshot(summary, DATA_DIR, news_df=news_df)
-        print(f"[Daily snapshot] Saved for {snapshot.get('date')}: score={snapshot.get('sentiment_score')}")
+        now = _dt.now(_tz.utc)
+        df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
+        window_start = (now - _td(hours=24, minutes=30)).replace(hour=21, minute=0, second=0)
+        trading_day_df = df[(df["published_at"] >= window_start) & (df["published_at"] <= now)]
+
+        if trading_day_df.empty:
+            trading_day_df = df[df["published_at"] >= now - _td(hours=24)]
+
+        if trading_day_df.empty or "sentiment_compound" not in trading_day_df.columns:
+            print("[Daily snapshot] No articles in trading window, skipping.")
+            return
+
+        summary = get_market_sentiment_summary(trading_day_df)
+        snapshot = collect_daily_snapshot(summary, DATA_DIR, news_df=trading_day_df)
+        print(f"[Daily snapshot] {snapshot.get('date')}: score={snapshot.get('sentiment_score')}, "
+              f"articles={summary.get('article_count')} (full trading day)")
     except Exception as e:
         print(f"[Daily snapshot] Failed: {e}")
 
@@ -187,26 +204,40 @@ def _clean_for_json(obj):
 
 @app.route("/api/news")
 def get_news():
-    """Get latest news — only articles from the last 24h (fallback 48h)."""
+    """Get latest news with pagination. Supports ?page=1&per_page=30&hours=24."""
     from datetime import datetime as _dt, timezone as _tz, timedelta as _td
     df = load_news(DATA_DIR)
     if df.empty:
-        return jsonify({"news": []})
+        return jsonify({"news": [], "total": 0, "page": 1, "per_page": 30, "has_more": False})
 
     df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
     now = _dt.now(_tz.utc)
+    hours = int(request.args.get("hours", 24))
 
-    fresh = df[df["published_at"] >= now - _td(hours=24)]
-    if len(fresh) < 5:
+    fresh = df[df["published_at"] >= now - _td(hours=hours)]
+    if len(fresh) < 5 and hours <= 24:
         fresh = df[df["published_at"] >= now - _td(hours=48)]
 
-    fresh = fresh.sort_values("published_at", ascending=False).head(100)
-    records = df_to_news_list(fresh)
+    fresh = fresh.sort_values("published_at", ascending=False)
+
+    total = len(fresh)
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = min(100, max(10, int(request.args.get("per_page", 30))))
+    start = (page - 1) * per_page
+    page_df = fresh.iloc[start:start + per_page]
+
+    records = df_to_news_list(page_df)
     records = [r for r in records if r.get("title")]
     for r in records:
         if not r.get("news_type"):
             r["news_type"] = classify_news_type(r.get("title", ""), r.get("summary", ""), r.get("source", ""))
-    return jsonify({"news": _clean_for_json(records)})
+    return jsonify({
+        "news": _clean_for_json(records),
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "has_more": start + per_page < total,
+    })
 
 
 @app.route("/api/sentiment-summary")

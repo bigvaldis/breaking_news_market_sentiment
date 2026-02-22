@@ -394,6 +394,46 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 0 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.news-count {
+  font-weight: 400;
+  font-size: 0.65rem;
+  opacity: 0.8;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.load-more-btn {
+  padding: 0.5rem 1.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.load-more-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.load-more-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .news-table-wrap {
