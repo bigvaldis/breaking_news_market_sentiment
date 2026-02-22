@@ -12,6 +12,8 @@
 
 **Live Demo:** [news-sentiment.imshaon.com](https://news-sentiment.imshaon.com/)
 
+**Article:** [Building a Real-Time Financial Sentiment Intelligence Dashboard](https://medium.com/@biswas.shaon/building-a-real-time-financial-sentiment-intelligence-dashboard-with-python-flask-and-react-574c1d57c61a) *(Medium — covers the initial build; the project has since added news type classification, correlation matrix, daily data collection, and automatic pipeline scheduling)*
+
 ---
 
 ## Screenshots
