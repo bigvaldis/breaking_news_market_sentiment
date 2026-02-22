@@ -3,7 +3,8 @@
 import math
 import os
 import threading
-from datetime import datetime
+import time
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -47,6 +48,48 @@ _market_cache = {
     "last_updated": None,
 }
 
+# ---------------------------------------------------------------------------
+# Persistent pipeline-run timestamps (survives Render sleep & worker restarts)
+# ---------------------------------------------------------------------------
+_PIPELINE_TS_FILE = ".last_news_pipeline"
+_MARKET_TS_FILE = ".last_market_refresh"
+_pipeline_lock = threading.Lock()
+
+
+def _read_ts(filename: str) -> float:
+    """Read a Unix timestamp from a file in DATA_DIR. Returns 0.0 if missing."""
+    try:
+        p = DATA_DIR / filename
+        if p.exists():
+            return float(p.read_text().strip())
+    except (ValueError, OSError):
+        pass
+    return 0.0
+
+
+def _write_ts(filename: str):
+    """Write current Unix timestamp to a file in DATA_DIR."""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        (DATA_DIR / filename).write_text(str(time.time()))
+    except OSError:
+        pass
+
+
+def _seconds_since_last_pipeline() -> float:
+    """Seconds elapsed since the news pipeline last completed."""
+    ts = _read_ts(_PIPELINE_TS_FILE)
+    if ts == 0.0:
+        return float("inf")
+    return time.time() - ts
+
+
+def _seconds_since_last_market_refresh() -> float:
+    ts = _read_ts(_MARKET_TS_FILE)
+    if ts == 0.0:
+        return float("inf")
+    return time.time() - ts
+
 
 def _refresh_market_cache():
     """Fetch all market trackers + F&G indices and update the in-memory cache."""
@@ -57,6 +100,7 @@ def _refresh_market_cache():
         btc_df = fetch_btc_history(days=90)
         fg = fetch_fear_greed()
         ws_fg = fetch_wall_street_fear_greed()
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with _cache_lock:
             _market_cache["markets"] = {
                 "sp500_data": _ohlc_to_list(sp500_df),
@@ -66,8 +110,9 @@ def _refresh_market_cache():
             }
             _market_cache["fear_greed"] = fg
             _market_cache["wall_street_fear_greed"] = ws_fg
-            _market_cache["last_updated"] = datetime.utcnow().isoformat() + "Z"
-        print(f"[Market cache] Refreshed at {_market_cache['last_updated']}")
+            _market_cache["last_updated"] = now_str
+        _write_ts(_MARKET_TS_FILE)
+        print(f"[Market cache] Refreshed at {now_str}")
     except Exception as e:
         print(f"[Market cache] Refresh failed: {e}")
 
@@ -79,7 +124,10 @@ CORS(app)
 
 
 def run_pipeline(use_news_api: bool = False) -> dict:
-    """Run news pipeline: fetch, filter, analyze, save. Runs every hour."""
+    """Run news pipeline: fetch, filter, analyze, save. Stamps completion time."""
+    t0 = time.time()
+    print(f"[Pipeline] Starting at {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC")
+
     df = fetch_all_news()
 
     if use_news_api and os.getenv("NEWSAPI_KEY"):
@@ -104,6 +152,10 @@ def run_pipeline(use_news_api: bool = False) -> dict:
     summary = get_market_sentiment_summary(df)
     save_news(df, DATA_DIR)
     append_sentiment_summary(summary, DATA_DIR)
+
+    _write_ts(_PIPELINE_TS_FILE)
+    elapsed = time.time() - t0
+    print(f"[Pipeline] Done in {elapsed:.1f}s — {summary.get('article_count', 0)} articles")
 
     history = load_sentiment_history(DATA_DIR)
     trend = get_sentiment_trend(history)
@@ -202,21 +254,46 @@ def _clean_for_json(obj):
     return obj
 
 
+def _ensure_fresh_news():
+    """If the news pipeline hasn't run recently, run it now (lazy refresh).
+
+    This guarantees fresh news even when Render sleeps the service between
+    user visits, killing the APScheduler background thread.
+    """
+    news_interval = int(os.getenv("NEWS_PIPELINE_MINUTES", "60")) * 60
+    elapsed = _seconds_since_last_pipeline()
+    if elapsed > news_interval:
+        print(f"[Lazy refresh] News is {elapsed:.0f}s old (limit {news_interval}s) — running pipeline")
+        with _pipeline_lock:
+            if _seconds_since_last_pipeline() > news_interval:
+                run_pipeline(use_news_api=True)
+
+
+def _ensure_fresh_markets():
+    """Refresh market cache if stale (same lazy pattern)."""
+    market_interval = int(os.getenv("MARKET_REFRESH_MINUTES", "15")) * 60
+    elapsed = _seconds_since_last_market_refresh()
+    if elapsed > market_interval:
+        print(f"[Lazy refresh] Markets are {elapsed:.0f}s old — refreshing cache")
+        _refresh_market_cache()
+
+
 @app.route("/api/news")
 def get_news():
-    """Get latest news with pagination. Supports ?page=1&per_page=30&hours=24."""
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    """Get latest news with pagination. Auto-refreshes if stale."""
+    _ensure_fresh_news()
+
+    now = datetime.now(timezone.utc)
     df = load_news(DATA_DIR)
     if df.empty:
         return jsonify({"news": [], "total": 0, "page": 1, "per_page": 30, "has_more": False})
 
     df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
-    now = _dt.now(_tz.utc)
     hours = int(request.args.get("hours", 24))
 
-    fresh = df[df["published_at"] >= now - _td(hours=hours)]
+    fresh = df[df["published_at"] >= now - timedelta(hours=hours)]
     if len(fresh) < 5 and hours <= 24:
-        fresh = df[df["published_at"] >= now - _td(hours=48)]
+        fresh = df[df["published_at"] >= now - timedelta(hours=48)]
 
     fresh = fresh.sort_values("published_at", ascending=False)
 
@@ -296,7 +373,8 @@ def get_wall_street_fear_greed():
 
 @app.route("/api/markets")
 def get_markets():
-    """S&P 500, Gold, VIX, BTC OHLC (served from 15-min cache)."""
+    """S&P 500, Gold, VIX, BTC OHLC (auto-refreshes if stale)."""
+    _ensure_fresh_markets()
     with _cache_lock:
         data = _market_cache["markets"].copy()
         data["cache_updated"] = _market_cache["last_updated"]
@@ -337,17 +415,31 @@ def get_vix():
 
 @app.route("/api/health")
 def health():
-    """Health check with schedule info."""
+    """Health check with schedule info and freshness diagnostics."""
     with _cache_lock:
         cache_updated = _market_cache["last_updated"]
+
+    news_age = _seconds_since_last_pipeline()
+    market_age = _seconds_since_last_market_refresh()
+
+    news_ts = _read_ts(_PIPELINE_TS_FILE)
+    news_last = datetime.fromtimestamp(news_ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if news_ts else None
+
     return jsonify({
         "status": "ok",
-        "market_cache_updated": cache_updated,
-        "schedule": {
-            "market_refresh": f"every {os.getenv('MARKET_REFRESH_MINUTES', '15')} min",
-            "news_pipeline": f"every {os.getenv('NEWS_PIPELINE_MINUTES', '60')} min",
-            "daily_snapshot": f"{os.getenv('DAILY_SNAPSHOT_HOUR', '21')}:{os.getenv('DAILY_SNAPSHOT_MINUTE', '30')} UTC",
+        "now_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "news_pipeline": {
+            "last_run": news_last,
+            "age_seconds": round(news_age, 0) if news_age != float("inf") else None,
+            "age_human": f"{news_age / 60:.0f} min ago" if news_age != float("inf") else "never",
+            "interval_minutes": int(os.getenv("NEWS_PIPELINE_MINUTES", "60")),
         },
+        "market_cache": {
+            "last_updated": cache_updated,
+            "age_seconds": round(market_age, 0) if market_age != float("inf") else None,
+            "interval_minutes": int(os.getenv("MARKET_REFRESH_MINUTES", "15")),
+        },
+        "daily_snapshot": f"{os.getenv('DAILY_SNAPSHOT_HOUR', '21')}:{os.getenv('DAILY_SNAPSHOT_MINUTE', '30')} UTC",
     })
 
 
@@ -412,11 +504,16 @@ def _scheduled_daily_snapshot():
 
 
 def _start_schedulers():
-    """Start all three background schedulers.
+    """Start background schedulers. Skips if already recently run (multi-worker safe).
 
     1. Market trackers + F&G: every 15 minutes
     2. News pipeline: every 1 hour
     3. Daily tracker snapshot: once per day at 21:30 UTC (4:30 PM ET, after market close)
+
+    The schedulers act as a BACKUP — the primary mechanism for freshness
+    is the lazy-refresh checks in /api/news and /api/markets that run the
+    pipeline on-demand whenever data is stale. This ensures fresh data even
+    when Render sleeps the service between visits.
     """
     disabled = os.getenv("DISABLE_SCHEDULED_PIPELINE", "").lower() in ("1", "true", "yes")
     if disabled:
@@ -431,26 +528,44 @@ def _start_schedulers():
         snapshot_hour = int(os.getenv("DAILY_SNAPSHOT_HOUR", "21"))
         snapshot_minute = int(os.getenv("DAILY_SNAPSHOT_MINUTE", "30"))
 
-        scheduler = BackgroundScheduler()
+        scheduler = BackgroundScheduler(daemon=True)
 
         scheduler.add_job(_scheduled_market_refresh, "interval", minutes=market_interval,
-                          id="market_refresh", name="Market data + F&G (15min)")
+                          id="market_refresh", name="Market data + F&G",
+                          replace_existing=True, max_instances=1)
         scheduler.add_job(_scheduled_news_pipeline, "interval", minutes=news_interval,
-                          id="news_pipeline", name="News pipeline (1hr)")
+                          id="news_pipeline", name="News pipeline",
+                          replace_existing=True, max_instances=1)
         scheduler.add_job(_scheduled_daily_snapshot, "cron", hour=snapshot_hour, minute=snapshot_minute,
-                          id="daily_snapshot", name="Daily ML snapshot (after market close)")
+                          id="daily_snapshot", name="Daily ML snapshot",
+                          replace_existing=True, max_instances=1)
 
         scheduler.start()
-        print(f"[Scheduler] Market trackers: every {market_interval} min")
-        print(f"[Scheduler] News pipeline: every {news_interval} min")
-        print(f"[Scheduler] Daily snapshot: {snapshot_hour:02d}:{snapshot_minute:02d} UTC")
+        print(f"[Scheduler] Market: every {market_interval}min | News: every {news_interval}min | "
+              f"Snapshot: {snapshot_hour:02d}:{snapshot_minute:02d} UTC")
     except Exception as e:
         print(f"[Scheduler] Failed to start: {e}")
 
 
-# On startup: populate market cache + run news pipeline immediately
-_refresh_market_cache()
-_scheduled_news_pipeline()
+# ---------------------------------------------------------------------------
+# Startup: populate caches only if stale (avoids duplicate work across workers)
+# ---------------------------------------------------------------------------
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+_news_stale = _seconds_since_last_pipeline() > int(os.getenv("NEWS_PIPELINE_MINUTES", "60")) * 60
+_market_stale = _seconds_since_last_market_refresh() > int(os.getenv("MARKET_REFRESH_MINUTES", "15")) * 60
+
+if _market_stale:
+    print("[Startup] Market cache is stale — refreshing")
+    _refresh_market_cache()
+else:
+    print(f"[Startup] Market cache is fresh ({_seconds_since_last_market_refresh():.0f}s old) — skipping")
+
+if _news_stale:
+    print("[Startup] News is stale — running pipeline")
+    _scheduled_news_pipeline()
+else:
+    print(f"[Startup] News is fresh ({_seconds_since_last_pipeline():.0f}s old) — skipping")
+
 _start_schedulers()
 
 if __name__ == "__main__":
