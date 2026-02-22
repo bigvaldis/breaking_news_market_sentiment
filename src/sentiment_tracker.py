@@ -24,8 +24,8 @@ def save_news(df: pd.DataFrame, path: Path = DEFAULT_DB_PATH) -> None:
     filepath = path / NEWS_CSV
     if filepath.exists():
         existing = pd.read_csv(filepath)
-        existing["published_at"] = pd.to_datetime(existing["published_at"])
-        existing["fetched_at"] = pd.to_datetime(existing["fetched_at"])
+        existing["published_at"] = pd.to_datetime(existing["published_at"], format="mixed", utc=True, errors="coerce")
+        existing["fetched_at"] = pd.to_datetime(existing["fetched_at"], format="mixed", utc=True, errors="coerce")
         combined = pd.concat([existing, df], ignore_index=True)
         combined = combined.drop_duplicates(subset=["title", "source", "url"], keep="last")
     else:
@@ -41,7 +41,7 @@ def load_news(path: Path = DEFAULT_DB_PATH) -> pd.DataFrame:
     df = pd.read_csv(filepath)
     for col in ["published_at", "fetched_at"]:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col])
+            df[col] = pd.to_datetime(df[col], format="mixed", utc=True, errors="coerce")
     return df
 
 

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import Sp500Chart from './Sp500Chart.jsx'
 import GoldChart from './GoldChart.jsx'
 import VixChart from './VixChart.jsx'
 
-const API = '/api'
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+const API = API_BASE ? `${API_BASE}/api` : '/api'
 
 function useMarkets() {
   const [markets, setMarkets] = useState({ sp500_data: [], gold_data: [], vix_data: [], btc_data: [] })
@@ -87,6 +88,7 @@ function NewsList({ news }) {
         <thead>
           <tr>
             <th>Headline</th>
+            <th>Type</th>
             <th>Source</th>
             <th>Time</th>
             <th>Sentiment</th>
@@ -96,9 +98,12 @@ function NewsList({ news }) {
           {news.slice(0, 30).map((article, i) => (
             <tr key={i}>
               <td>
-                <a href={article.url} target="_blank" rel="noopener noreferrer" className="news-title">
-                  {article.title}
+                <a href={article.url || '#'} target="_blank" rel="noopener noreferrer" className="news-title">
+                  {article.title || '(No title)'}
                 </a>
+              </td>
+              <td className="news-type-cell">
+                {article.news_type && <span className={`type-badge type-${(article.news_type || '').toLowerCase().replace(/[\s\/]+/g, '-')}`}>{article.news_type}</span>}
               </td>
               <td className="news-source-cell">{article.source}</td>
               <td className="news-time-cell">{formatTimeAgo(article.published_at)}</td>
@@ -309,6 +314,120 @@ function BtcTrackerCard({ btcData }) {
 }
 
 
+function CorrelationMatrix({ apiBase }) {
+  const [data, setData] = useState(null)
+  const [activePeriod, setActivePeriod] = useState('7d')
+
+  useEffect(() => {
+    fetch(`${apiBase}/correlation-matrix`)
+      .then((r) => r.json())
+      .then(setData)
+      .catch(() => {})
+  }, [apiBase])
+
+  if (!data || !data.periods?.length) {
+    const msg = data?.message || 'Run the pipeline daily to start building correlation data.'
+    return (
+      <div className="chart-card correlation-matrix-card">
+        <h3>Sentiment vs Market Correlation</h3>
+        <p className="correlation-empty">{msg}</p>
+      </div>
+    )
+  }
+
+  const { periods, indicators, data_start, total_days, message } = data
+  const period = periods.find((p) => p.key === activePeriod) || periods[0]
+  const { matrix, categories, days_available } = period
+
+  const cellColor = (val) => {
+    if (val === null || val === undefined) return { bg: 'transparent', text: 'var(--text-muted)' }
+    const v = Math.max(-1, Math.min(1, val))
+    if (v > 0) {
+      const alpha = Math.min(v * 0.8, 0.7)
+      return { bg: `rgba(34, 197, 94, ${alpha})`, text: alpha > 0.35 ? '#fff' : 'var(--text)' }
+    }
+    const alpha = Math.min(Math.abs(v) * 0.8, 0.7)
+    return { bg: `rgba(239, 68, 68, ${alpha})`, text: alpha > 0.35 ? '#fff' : 'var(--text)' }
+  }
+
+  const hasData = categories?.length > 0
+
+  return (
+    <div className="chart-card correlation-matrix-card">
+      <div className="corr-header">
+        <div>
+          <h3>Sentiment vs Market Correlation</h3>
+          <p className="correlation-subtitle">
+            {data_start && <>Collecting since <strong>{data_start}</strong> &middot; </>}
+            {total_days} day(s) of data
+            {days_available > 0 && <> &middot; {days_available} in selected period</>}
+          </p>
+        </div>
+      </div>
+
+      <div className="corr-period-tabs">
+        {periods.map((p) => (
+          <button
+            key={p.key}
+            className={`corr-period-tab ${activePeriod === p.key ? 'active' : ''}`}
+            onClick={() => setActivePeriod(p.key)}
+          >
+            {p.label}
+            {p.days_available > 0 && <span className="corr-tab-days">{p.days_available}d</span>}
+          </button>
+        ))}
+      </div>
+
+      {hasData ? (
+        <>
+          <div className="corr-matrix-wrap">
+            <table className="corr-matrix-table">
+              <thead>
+                <tr>
+                  <th className="corr-label-header">Source / Topic</th>
+                  {indicators.map((ind) => (
+                    <th key={ind} className="corr-indicator-header">{ind}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((cat) => (
+                  <tr key={cat} className={cat === 'Overall Sentiment' ? 'corr-overall-row' : ''}>
+                    <td className="corr-category">{cat}</td>
+                    {indicators.map((ind) => {
+                      const val = matrix[cat]?.[ind]
+                      const { bg, text } = cellColor(val)
+                      return (
+                        <td
+                          key={ind}
+                          className="corr-cell"
+                          style={{ backgroundColor: bg, color: text }}
+                          title={val != null ? `r = ${val.toFixed(4)}` : 'Insufficient data'}
+                        >
+                          {val != null ? val.toFixed(2) : '—'}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="corr-legend">
+            <span className="corr-leg-pos">Green = positive correlation</span>
+            <span className="corr-leg-neg">Red = negative correlation</span>
+            <span className="corr-leg-none">— = not enough data</span>
+          </p>
+        </>
+      ) : (
+        <p className="correlation-empty corr-no-period-data">No data for this period yet.</p>
+      )}
+      {message && <p className="correlation-empty corr-note">{message}</p>}
+    </div>
+  )
+}
+
+
 export default function App() {
   const [summary, setSummary] = useState(null)
   const [news, setNews] = useState([])
@@ -332,26 +451,33 @@ export default function App() {
     }
   }
 
+  const fetchWithTimeout = (url, ms = 8000) => {
+    const c = new AbortController()
+    const t = setTimeout(() => c.abort(), ms)
+    return fetch(url, { signal: c.signal }).finally(() => clearTimeout(t))
+  }
+
   const fetchData = async () => {
     const healthRes = await fetch(`${API}/health`)
     if (!healthRes.ok) throw new Error('Health check failed')
     setApiConnected(true)
     setError(null)
 
-    const [sumRes, newsRes, histRes, fgRes, wsFgRes] = await Promise.all([
+    const results = await Promise.allSettled([
+      fetch(`${API}/news`, { cache: 'no-store' }),
       fetch(`${API}/sentiment-summary`),
-      fetch(`${API}/news`),
       fetch(`${API}/sentiment-history`),
-      fetch(`${API}/fear-greed`),
-      fetch(`${API}/wall-street-fear-greed`),
+      fetchWithTimeout(`${API}/fear-greed`, 6000).catch(() => ({ ok: false })),
+      fetchWithTimeout(`${API}/wall-street-fear-greed`, 6000).catch(() => ({ ok: false })),
     ])
-    const sum = await sumRes.json()
-    const newsData = await newsRes.json()
-    const histData = await histRes.json()
-    const fgData = await fgRes.json()
-    const wsFgData = await wsFgRes.json()
-    setSummary(sum)
+    const [newsRes, sumRes, histRes, fgRes, wsFgRes] = results.map((r) => r.status === 'fulfilled' ? r.value : null)
+    const newsData = newsRes?.ok ? await newsRes.json() : { news: [] }
+    const sum = sumRes?.ok ? await sumRes.json() : {}
+    const histData = histRes?.ok ? await histRes.json() : { history: [] }
+    const fgData = fgRes?.ok ? await fgRes.json() : {}
+    const wsFgData = wsFgRes?.ok ? await wsFgRes.json() : {}
     setNews(newsData.news || [])
+    setSummary(sum)
     setHistory(histData.history || [])
     setFearGreed(fgData)
     setWallStreetFearGreed(wsFgData)
@@ -361,8 +487,12 @@ export default function App() {
   const runPipeline = async () => {
     setLoading(true)
     setError(null)
+    const isDeployed = !window.location.hostname.match(/^localhost|127\.0\.0\.1$/)
+    const controller = new AbortController()
+    const timeoutId = isDeployed ? setTimeout(() => controller.abort(), 100000) : null
     try {
-      const res = await fetch(`${API}/pipeline/run`, { method: 'POST' })
+      const res = await fetch(`${API}/pipeline/run`, { method: 'POST', signal: controller.signal })
+      if (timeoutId) clearTimeout(timeoutId)
       const data = await res.json()
       if (data.error) {
         setError(data.error === 'no_news' ? 'No news fetched. RSS feeds may be temporarily unavailable.' : data.message || data.error)
@@ -371,7 +501,12 @@ export default function App() {
         await fetchData()
       }
     } catch (e) {
-      setError('Could not run pipeline. Is the Flask server running?')
+      if (timeoutId) clearTimeout(timeoutId)
+      if (e.name === 'AbortError') {
+        setError(isDeployed ? 'Request timed out. The pipeline may still be running—wait a moment and Retry.' : 'Pipeline took too long. Try again.')
+      } else {
+        setError(isDeployed ? 'Service unavailable. If it just spun up, wait ~1 min and Retry. Otherwise check Render logs.' : 'Could not run pipeline. Is the Flask server running?')
+      }
     } finally {
       setLoading(false)
     }
@@ -382,7 +517,7 @@ export default function App() {
     const tryConnect = async (attempt = 0) => {
       if (cancelled) return
       const isDeployed = !window.location.hostname.match(/^localhost|127\.0\.0\.1$/)
-      const maxAttempts = isDeployed ? 15 : 3
+      const maxAttempts = isDeployed ? 24 : 3
       try {
         await fetchData()
         if (cancelled) return
@@ -406,12 +541,16 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Auto-fetch news on first load when feed is empty
+  // Auto-run pipeline only when feed is empty after fetchData completes (user can also click Fetch)
+  const hasTriedPipeline = useRef(false)
   useEffect(() => {
-    if (apiConnected && news.length === 0 && !loading && !error) {
+    if (!apiConnected || loading || error || news.length > 0 || hasTriedPipeline.current) return
+    const t = setTimeout(() => {
+      hasTriedPipeline.current = true
       runPipeline()
-    }
-  }, [apiConnected, news.length])
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [apiConnected, news.length, loading, error])
 
   // News auto-refresh every 1 hour
   useEffect(() => {
@@ -452,20 +591,27 @@ export default function App() {
       {error && (
         <div className="error-banner">
           {error}
-          <button
-            className="retry-btn"
-            onClick={async () => {
-              setError(null)
-              try {
-                await fetchData()
-              } catch {
-                setApiConnected(false)
-                setError('Still unavailable. Check Render logs or try again later.')
-              }
-            }}
-          >
-            Retry
-          </button>
+          <div className="error-actions">
+            <button
+              className="retry-btn"
+              onClick={async () => {
+                setError(null)
+                try {
+                  await fetchData()
+                } catch {
+                  setApiConnected(false)
+                  setError('Still unavailable. Check Render logs or try again later.')
+                }
+              }}
+            >
+              Retry
+            </button>
+            {!window.location.hostname.match(/^localhost|127\.0\.0\.1$/) && (
+              <a href={`${API.replace(/\/api$/, '')}/api/health`} target="_blank" rel="noopener noreferrer" className="test-api-link">
+                Test API
+              </a>
+            )}
+          </div>
         </div>
       )}
 
@@ -497,6 +643,10 @@ export default function App() {
             <GoldChart data={markets.gold_data} />
             <VixChart data={markets.vix_data} />
           </div>
+        </section>
+
+        <section className="correlation-matrix-section">
+          <CorrelationMatrix apiBase={API} />
         </section>
 
         <section className="news-section">

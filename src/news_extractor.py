@@ -7,13 +7,24 @@ from datetime import datetime
 import pandas as pd
 
 
-# Financial news RSS feeds (no API key required)
+# Financial and political news RSS feeds (no API key required)
+# Preferred: CNBC, Bloomberg, CNN, BBC, ABC News
 RSS_FEEDS = [
     ("Bloomberg Markets", "https://feeds.bloomberg.com/markets/news.rss"),
     ("CNBC Top News", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),
+    ("CNBC Business", "https://www.cnbc.com/id/10001147/device/rss/rss.html"),
     ("Dow Jones", "https://feeds.content.dowjones.io/public/rss/mw_topstories"),
     ("Yahoo Finance", "https://feeds.finance.yahoo.com/rss/2.0/headline"),
     ("Reuters Business", "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best"),
+    ("CNN Top Stories", "http://rss.cnn.com/rss/cnn_topstories.rss"),
+    ("CNN Politics", "http://rss.cnn.com/rss/cnn_allpolitics.rss"),
+    ("CNN Business", "http://rss.cnn.com/rss/money_news_international.rss"),
+    ("BBC News", "http://feeds.bbci.co.uk/news/rss.xml"),
+    ("BBC Business", "http://feeds.bbci.co.uk/news/business/rss.xml"),
+    ("ABC News", "https://abcnews.go.com/abcnews/topstories"),
+    ("ABC Politics", "https://abcnews.go.com/abcnews/politicsheadlines"),
+    # Trump Truth Social (free RSS, no API key) — trumpstruth.org archive
+    ("Trump (Truth Social)", "https://trumpstruth.org/feed"),
 ]
 
 
@@ -62,6 +73,16 @@ def fetch_all_news() -> pd.DataFrame:
 
     df = pd.DataFrame(all_articles)
     df = df.drop_duplicates(subset=["title", "source"], keep="first")
+
+    # Optional: Add Trump X tweets if TWITTER_BEARER_TOKEN is set (X API is paid)
+    try:
+        from src.trump_tweets import fetch_trump_x_tweets
+        tweets_df = fetch_trump_x_tweets()
+        if not tweets_df.empty:
+            df = pd.concat([df, tweets_df], ignore_index=True)
+    except Exception:
+        pass
+
     df = df.sort_values("published_at", ascending=False).reset_index(drop=True)
     return df
 

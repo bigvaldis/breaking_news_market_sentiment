@@ -1,9 +1,12 @@
 """Flask API for News & Market Sentiment Analysis."""
 
+import math
 import os
 from pathlib import Path
 
-from flask import Flask, jsonify, send_from_directory
+import pandas as pd
+
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 # Add project root to path
@@ -13,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 
 from src.news_extractor import fetch_all_news, fetch_news_api
+from src.news_filter import filter_and_rank_news, classify_news_type
 from src.sentiment_analyzer import (
     analyze_sentiment_vader,
     get_market_sentiment_summary,
@@ -27,6 +31,7 @@ from src.sentiment_tracker import (
 from src.fear_greed import fetch_fear_greed
 from src.wall_street_fear_greed import fetch_wall_street_fear_greed
 from src.market_data import fetch_btc_history, fetch_gold_history, fetch_sp500_history, fetch_vix_history, _ohlc_to_list
+from src.daily_tracker import collect_daily_snapshot, load_daily_tracker, compute_correlation_matrix
 
 load_dotenv()
 
@@ -47,14 +52,44 @@ def run_pipeline(use_news_api: bool = False) -> dict:
     if df.empty:
         return {"error": "no_news"}
 
+    # Filter to financial/political news, prefer CNBC, Bloomberg, CNN, BBC, ABC
+    # Jim Cramer and Trump-related content get higher priority
+    df = filter_and_rank_news(df)
+    if df.empty:
+        return {"error": "no_news", "message": "No financial or political news matched filters"}
+
     df = analyze_sentiment_vader(df)
     summary = get_market_sentiment_summary(df)
     save_news(df, DATA_DIR)
     append_sentiment_summary(summary, DATA_DIR)
 
+    # Collect daily snapshot for data science (sentiment + all market indicators)
+    try:
+        collect_daily_snapshot(summary, DATA_DIR, news_df=df)
+    except Exception as e:
+        print(f"Daily tracker snapshot failed (non-fatal): {e}")
+
     history = load_sentiment_history(DATA_DIR)
     trend = get_sentiment_trend(history)
     return {**summary, "trend": trend["trend"], "recent_avg": trend["recent_avg"]}
+
+
+def _sanitize_value(v):
+    """Replace NaN/Inf/NA with None for JSON."""
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    try:
+        f = float(v)
+        if math.isnan(f) or math.isinf(f):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return v
 
 
 def df_to_news_list(df):
@@ -65,7 +100,11 @@ def df_to_news_list(df):
     for col in ["published_at", "fetched_at"]:
         if col in df.columns:
             df[col] = df[col].astype(str)
-    return df.to_dict(orient="records")
+    records = df.to_dict(orient="records")
+    for r in records:
+        for k in list(r.keys()):
+            r[k] = _sanitize_value(r[k])
+    return records
 
 
 @app.route("/api/pipeline/run", methods=["POST"])
@@ -75,12 +114,34 @@ def run_pipeline_endpoint():
     return jsonify(result)
 
 
+def _clean_for_json(obj):
+    """Recursively replace NaN/Inf with None for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _clean_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean_for_json(x) for x in obj]
+    try:
+        if isinstance(obj, (int, str, bool)) or obj is None:
+            return obj
+        f = float(obj)
+        if math.isnan(f) or math.isinf(f):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return obj
+
+
 @app.route("/api/news")
 def get_news():
     """Get latest news from archive."""
     df = load_news(DATA_DIR)
     df = df.sort_values("published_at", ascending=False).head(100)
-    return jsonify({"news": df_to_news_list(df)})
+    records = df_to_news_list(df)
+    records = [r for r in records if r.get("title")]
+    for r in records:
+        if not r.get("news_type"):
+            r["news_type"] = classify_news_type(r.get("title", ""), r.get("summary", ""), r.get("source", ""))
+    return jsonify({"news": _clean_for_json(records)})
 
 
 @app.route("/api/sentiment-summary")
@@ -99,6 +160,24 @@ def get_sentiment_history():
     """Get sentiment history for charts."""
     history = load_sentiment_history(DATA_DIR)
     return jsonify({"history": history})
+
+
+@app.route("/api/daily-tracker")
+def get_daily_tracker():
+    """Daily sentiment vs market indicators for data science."""
+    df = load_daily_tracker(DATA_DIR)
+    if df.empty:
+        return jsonify({"data": [], "message": "No snapshots yet. Run the pipeline to start collecting."})
+    records = df.to_dict(orient="records")
+    return jsonify({"data": _clean_for_json(records), "count": len(records)})
+
+
+@app.route("/api/correlation-matrix")
+def get_correlation_matrix():
+    """Correlation matrix: news source sentiment vs market indicators."""
+    period = request.args.get("period")
+    result = compute_correlation_matrix(DATA_DIR, period_key=period)
+    return jsonify(_clean_for_json(result))
 
 
 @app.route("/api/fear-greed")
@@ -186,6 +265,17 @@ if FRONTEND_DIST.exists():
         if file_path.is_file():
             return send_from_directory(FRONTEND_DIST, path)
         return send_from_directory(FRONTEND_DIST, "index.html")
+else:
+    @app.route("/")
+    def index_fallback():
+        return (
+            "<h1>Frontend not built</h1>"
+            "<p>Run <code>cd frontend && npm run build</code> then restart Flask.</p>"
+            "<p>Or use <code>./start.sh</code> for dev (React on :3000, API on :5001).</p>"
+            "<p><a href='/api/health'>API health</a></p>",
+            200,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
 
 
 if __name__ == "__main__":

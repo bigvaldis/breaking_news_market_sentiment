@@ -14,3 +14,5 @@ services:
         sync: false  # Add manually in Render dashboard if desired
       - key: RAPIDAPI_KEY
         sync: false  # For Wall Street Fear & Greed; subscribe at rapidapi.com/rpi4gx/api/fear-and-greed-index
+      - key: TWITTER_BEARER_TOKEN
+        sync: false  # Optional: X API v2 for Trump tweets

@@ -3,7 +3,9 @@ venv/
 .venv/
 node_modules/
 frontend/.vite/
+playwright-browsers/
 capture_screenshots.py
+check_app.py
 frontend/dist/
 __pycache__/
 *.pyc
