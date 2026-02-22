@@ -347,7 +347,7 @@ function CorrelationHeatmap({ apiBase }) {
     const ctx = canvas.getContext('2d')
     const dpr = window.devicePixelRatio || 1
 
-    const labelW = 140
+    const labelW = 170
     const cellW = 68
     const cellH = 36
     const headerH = 60
@@ -379,12 +379,13 @@ function CorrelationHeatmap({ apiBase }) {
 
     categories.forEach((cat, ri) => {
       const y = headerH + ri * cellH
-      const isOverall = cat === 'Overall Sentiment'
+      const isHighlight = cat === 'Overall Sentiment' || cat.startsWith('All ')
 
-      ctx.fillStyle = isOverall ? '#94a3b8' : '#64748b'
+      ctx.fillStyle = isHighlight ? '#94a3b8' : '#64748b'
       ctx.textAlign = 'left'
-      ctx.font = isOverall ? 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif' : '500 11px -apple-system, BlinkMacSystemFont, sans-serif'
-      ctx.fillText(cat.length > 18 ? cat.slice(0, 17) + '...' : cat, 4, y + cellH / 2 + 4)
+      ctx.font = isHighlight ? 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif' : '500 11px -apple-system, BlinkMacSystemFont, sans-serif'
+      const maxLen = 22
+      ctx.fillText(cat.length > maxLen ? cat.slice(0, maxLen - 1) + '...' : cat, 4, y + cellH / 2 + 4)
 
       indicators.forEach((ind, ci) => {
         const x = labelW + ci * cellW
@@ -421,16 +422,17 @@ function CorrelationHeatmap({ apiBase }) {
       })
     })
 
-    if (categories.includes('Overall Sentiment')) {
-      const overallIdx = categories.indexOf('Overall Sentiment')
-      const lineY = headerH + overallIdx * cellH
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.5)'
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(0, lineY)
-      ctx.lineTo(totalW, lineY)
-      ctx.stroke()
-    }
+    categories.forEach((cat, ri) => {
+      if (cat === 'Overall Sentiment' || cat.startsWith('All ')) {
+        const lineY = headerH + ri * cellH
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(0, lineY)
+        ctx.lineTo(totalW, lineY)
+        ctx.stroke()
+      }
+    })
   }, [data, activePeriod, categories, indicators, matrix])
 
   if (!data || !data.periods?.length) {
@@ -539,7 +541,7 @@ function CorrelationMatrix({ apiBase }) {
             {days_available > 0 && <> &middot; {days_available} in selected period</>}
           </p>
           <p className="corr-markets-note">
-            Correlation of average daily sentiment (overall and per source) with: S&P 500, Gold (XAU), VIX, BTC, Crypto Fear & Greed, Wall Street Fear & Greed
+            How sentiment (positive/negative) × news type (Financial, Crypto, Tariff, etc.) correlates with market indicators
           </p>
         </div>
       </div>
@@ -563,7 +565,7 @@ function CorrelationMatrix({ apiBase }) {
             <table className="corr-matrix-table">
               <thead>
                 <tr>
-                  <th className="corr-label-header">Source / Topic</th>
+                  <th className="corr-label-header">Sentiment + Type</th>
                   {indicators.map((ind) => (
                     <th key={ind} className="corr-indicator-header">{ind}</th>
                   ))}
@@ -571,7 +573,7 @@ function CorrelationMatrix({ apiBase }) {
               </thead>
               <tbody>
                 {categories.map((cat) => (
-                  <tr key={cat} className={cat === 'Overall Sentiment' ? 'corr-overall-row' : ''}>
+                  <tr key={cat} className={cat === 'Overall Sentiment' || cat.startsWith('All ') ? 'corr-overall-row' : ''}>
                     <td className="corr-category">{cat}</td>
                     {indicators.map((ind) => {
                       const val = matrix[cat]?.[ind]

@@ -2,13 +2,14 @@
 
 Each pipeline run appends a row to data/daily_tracker.csv with:
 - Date & timestamp
-- Average sentiment score & label (overall + per source category)
+- Average sentiment score & label
 - Crypto Fear & Greed Index
 - Wall Street (CNN) Fear & Greed Index
 - S&P 500 close, Gold close, VIX close, BTC close
 
-Also saves per-source sentiment breakdown to data/source_sentiment.csv
-for correlation analysis between news types and market movement.
+Also saves per sentiment_label × news_type breakdown to
+data/type_sentiment.csv for correlation analysis between
+news sentiment/type combinations and market movement.
 """
 
 import math
@@ -20,6 +21,7 @@ import pandas as pd
 
 TRACKER_CSV = "daily_tracker.csv"
 SOURCE_SENTIMENT_CSV = "source_sentiment.csv"
+TYPE_SENTIMENT_CSV = "type_sentiment.csv"
 
 COLUMNS = [
     "date",
@@ -157,7 +159,6 @@ def collect_daily_snapshot(
 
     _append_snapshot(snapshot, data_dir)
 
-    # Per-source sentiment breakdown
     if news_df is not None and not news_df.empty and "sentiment_compound" in news_df.columns:
         market_data = {
             "sp500_close": sp500,
@@ -168,6 +169,7 @@ def collect_daily_snapshot(
             "wall_street_fear_greed_value": ws_fg_val,
         }
         _save_source_sentiment(news_df, date_str, now, market_data, data_dir)
+        _save_type_sentiment(news_df, date_str, now, market_data, data_dir)
 
     return snapshot
 
@@ -176,7 +178,7 @@ def _save_source_sentiment(
     df: pd.DataFrame, date_str: str, now: datetime,
     market_data: dict, data_dir: Path,
 ) -> None:
-    """Save per-source-category average sentiment with market data."""
+    """Save per-source-category average sentiment (legacy, kept for backward compat)."""
     df = df.copy()
     df["_category"] = df["source"].apply(_categorize_source)
 
@@ -201,6 +203,49 @@ def _save_source_sentiment(
 
     data_dir.mkdir(parents=True, exist_ok=True)
     filepath = data_dir / SOURCE_SENTIMENT_CSV
+    row_df = pd.DataFrame(rows)
+
+    if filepath.exists():
+        row_df.to_csv(filepath, mode="a", header=False, index=False)
+    else:
+        row_df.to_csv(filepath, index=False)
+
+
+def _save_type_sentiment(
+    df: pd.DataFrame, date_str: str, now: datetime,
+    market_data: dict, data_dir: Path,
+) -> None:
+    """Save per sentiment_label × news_type breakdown with market data.
+
+    Each row = one (sentiment_label, news_type) combo for the day, e.g.:
+      positive + Financial, negative + Tariff/Trade, positive + Crypto, etc.
+    """
+    df = df.copy()
+    if "news_type" not in df.columns or "sentiment_label" not in df.columns:
+        return
+
+    grouped = df.groupby(["sentiment_label", "news_type"]).agg(
+        avg_sentiment=("sentiment_compound", "mean"),
+        article_count=("sentiment_compound", "count"),
+    ).reset_index()
+
+    rows = []
+    for _, g in grouped.iterrows():
+        rows.append({
+            "date": date_str,
+            "timestamp": now.isoformat(),
+            "sentiment_label": g["sentiment_label"],
+            "news_type": g["news_type"],
+            "avg_sentiment": _safe_float(g["avg_sentiment"]),
+            "article_count": int(g["article_count"]),
+            **{k: v for k, v in market_data.items()},
+        })
+
+    if not rows:
+        return
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    filepath = data_dir / TYPE_SENTIMENT_CSV
     row_df = pd.DataFrame(rows)
 
     if filepath.exists():
@@ -236,8 +281,19 @@ def load_daily_tracker(data_dir: Path) -> pd.DataFrame:
 
 
 def load_source_sentiment(data_dir: Path) -> pd.DataFrame:
-    """Load the per-source sentiment CSV."""
+    """Load the per-source sentiment CSV (legacy)."""
     filepath = data_dir / SOURCE_SENTIMENT_CSV
+    if not filepath.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(filepath)
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+    return df
+
+
+def load_type_sentiment(data_dir: Path) -> pd.DataFrame:
+    """Load the per sentiment_label × news_type CSV."""
+    filepath = data_dir / TYPE_SENTIMENT_CSV
     if not filepath.exists():
         return pd.DataFrame()
     df = pd.read_csv(filepath)
@@ -269,51 +325,89 @@ TIME_PERIODS = [
 ]
 
 
-def _compute_corr_for_period(source_df, tracker_df, cutoff_date):
-    """Compute one correlation matrix for data on or after cutoff_date."""
-    sdf = source_df[source_df["date"] >= cutoff_date] if not source_df.empty else source_df
-    tdf = tracker_df[tracker_df["date"] >= cutoff_date] if not tracker_df.empty else tracker_df
+def _compute_corr_for_period(type_df, tracker_df, cutoff_date):
+    """Compute correlation matrix: sentiment×type vs market indicators.
 
-    if sdf.empty and tdf.empty:
+    Rows are like: "Positive + Financial", "Negative + Tariff/Trade", etc.
+    Each row shows how that sentiment+type combination's average compound
+    score correlates with each market indicator over the period.
+    """
+    tdf = type_df[type_df["date"] >= cutoff_date] if not type_df.empty else type_df
+    overall_df = tracker_df[tracker_df["date"] >= cutoff_date] if not tracker_df.empty else tracker_df
+
+    if tdf.empty and overall_df.empty:
         return {}, [], 0
 
-    # Aggregate to daily averages per source category
-    if not sdf.empty:
-        daily = sdf.groupby(["date", "source_category"]).agg(
-            avg_sentiment=("avg_sentiment", "mean"),
-            **{ind: (ind, "first") for ind in INDICATORS if ind in sdf.columns},
-        ).reset_index()
-        categories = sorted(daily["source_category"].unique().tolist())
-    else:
-        daily = pd.DataFrame()
-        categories = []
-
-    n_days = daily["date"].nunique() if not daily.empty else 0
-
+    categories = []
     matrix = {}
-    for cat in categories:
-        cat_data = daily[daily["source_category"] == cat].copy()
-        row = {}
-        for ind in INDICATORS:
-            if ind not in cat_data.columns:
-                row[INDICATOR_LABELS[ind]] = None
-                continue
-            valid = cat_data[["avg_sentiment", ind]].dropna()
-            if len(valid) < 3:
-                row[INDICATOR_LABELS[ind]] = None
-            else:
-                corr = valid["avg_sentiment"].corr(valid[ind])
-                row[INDICATOR_LABELS[ind]] = _safe_float(corr)
-        matrix[cat] = row
 
-    # Overall sentiment
     if not tdf.empty:
+        daily = tdf.groupby(["date", "sentiment_label", "news_type"]).agg(
+            avg_sentiment=("avg_sentiment", "mean"),
+            article_count=("article_count", "sum"),
+            **{ind: (ind, "first") for ind in INDICATORS if ind in tdf.columns},
+        ).reset_index()
+
+        daily["combo"] = daily["sentiment_label"].str.capitalize() + " + " + daily["news_type"]
+
+        combos = sorted(daily["combo"].unique().tolist())
+        n_days = daily["date"].nunique()
+
+        for combo in combos:
+            combo_data = daily[daily["combo"] == combo].copy()
+            if len(combo_data) < 2:
+                continue
+            row = {}
+            for ind in INDICATORS:
+                if ind not in combo_data.columns:
+                    row[INDICATOR_LABELS[ind]] = None
+                    continue
+                valid = combo_data[["avg_sentiment", ind]].dropna()
+                if len(valid) < 3:
+                    row[INDICATOR_LABELS[ind]] = None
+                else:
+                    corr = valid["avg_sentiment"].corr(valid[ind])
+                    row[INDICATOR_LABELS[ind]] = _safe_float(corr)
+            matrix[combo] = row
+            categories.append(combo)
+    else:
+        n_days = 0
+
+    # Also add per-sentiment-label aggregates (all types combined)
+    if not tdf.empty:
+        for label in ["positive", "negative", "neutral"]:
+            label_data = tdf[tdf["sentiment_label"] == label]
+            if label_data.empty:
+                continue
+            agg = label_data.groupby("date").agg(
+                avg_sentiment=("avg_sentiment", "mean"),
+                **{ind: (ind, "first") for ind in INDICATORS if ind in label_data.columns},
+            ).reset_index()
+            if len(agg) < 2:
+                continue
+            row = {}
+            for ind in INDICATORS:
+                if ind not in agg.columns:
+                    row[INDICATOR_LABELS[ind]] = None
+                    continue
+                valid = agg[["avg_sentiment", ind]].dropna()
+                if len(valid) < 3:
+                    row[INDICATOR_LABELS[ind]] = None
+                else:
+                    corr = valid["avg_sentiment"].corr(valid[ind])
+                    row[INDICATOR_LABELS[ind]] = _safe_float(corr)
+            key = f"All {label.capitalize()}"
+            matrix[key] = row
+            categories.insert(0, key)
+
+    # Overall sentiment from daily_tracker
+    if not overall_df.empty:
         overall_row = {}
         for ind in INDICATORS:
-            if ind not in tdf.columns:
+            if ind not in overall_df.columns:
                 overall_row[INDICATOR_LABELS[ind]] = None
                 continue
-            valid = tdf[["sentiment_score", ind]].dropna()
+            valid = overall_df[["sentiment_score", ind]].dropna()
             if len(valid) < 3:
                 overall_row[INDICATOR_LABELS[ind]] = None
             else:
@@ -325,24 +419,21 @@ def _compute_corr_for_period(source_df, tracker_df, cutoff_date):
 
 
 def compute_correlation_matrix(data_dir: Path, period_key: str = None) -> dict:
-    """Compute correlation matrices for all time periods.
-
-    If period_key is given, returns only that period.
-    Otherwise returns all periods.
+    """Compute correlation matrices: sentiment × news_type vs market indicators.
 
     Returns dict with:
       - periods: list of {key, label, days_in_period, days_available, matrix, categories}
       - indicators: list of indicator names
-      - data_start: earliest date in the dataset
+      - data_start: earliest date
       - total_days: total unique dates collected
-      - message: status message
+      - message: status
     """
-    source_df = load_source_sentiment(data_dir)
+    type_df = load_type_sentiment(data_dir)
     tracker_df = load_daily_tracker(data_dir)
 
     all_dates = set()
-    if not source_df.empty and "date" in source_df.columns:
-        all_dates.update(source_df["date"].dropna().unique())
+    if not type_df.empty and "date" in type_df.columns:
+        all_dates.update(type_df["date"].dropna().unique())
     if not tracker_df.empty and "date" in tracker_df.columns:
         all_dates.update(tracker_df["date"].dropna().unique())
 
@@ -352,7 +443,7 @@ def compute_correlation_matrix(data_dir: Path, period_key: str = None) -> dict:
             "indicators": [INDICATOR_LABELS[i] for i in INDICATORS],
             "data_start": None,
             "total_days": 0,
-            "message": "No data yet. Click 'Fetch Latest News' 3+ times (or wait for hourly auto-runs) to start collecting.",
+            "message": "No data yet. The daily snapshot saves after each market close (21:30 UTC).",
         }
 
     from datetime import date, timedelta
@@ -369,7 +460,7 @@ def compute_correlation_matrix(data_dir: Path, period_key: str = None) -> dict:
         warnings.simplefilter("ignore", RuntimeWarning)
         for p in periods_to_compute:
             cutoff = today - timedelta(days=p["days"])
-            matrix, categories, days_avail = _compute_corr_for_period(source_df, tracker_df, cutoff)
+            matrix, categories, days_avail = _compute_corr_for_period(type_df, tracker_df, cutoff)
             all_cats = (["Overall Sentiment"] + categories) if "Overall Sentiment" in matrix else categories
             result_periods.append({
                 "key": p["key"],
@@ -385,5 +476,5 @@ def compute_correlation_matrix(data_dir: Path, period_key: str = None) -> dict:
         "indicators": [INDICATOR_LABELS[i] for i in INDICATORS],
         "data_start": str(data_start),
         "total_days": total_days,
-        "message": f"Collecting since {data_start} ({total_days} day(s)). Need 3+ pipeline runs for correlations. Run 'Fetch Latest News' a few times or wait for the hourly auto-runs.",
+        "message": f"Collecting since {data_start} ({total_days} day(s)). Need 3+ days for correlations.",
     }
