@@ -18,8 +18,16 @@ def ensure_data_dir(path: Path = DEFAULT_DB_PATH) -> Path:
     return path
 
 
+def _normalize_title(t):
+    """Normalize title for dedup: lowercase, strip whitespace/punctuation."""
+    import re
+    if not isinstance(t, str):
+        return ""
+    return re.sub(r"[^a-z0-9 ]", "", t.lower()).strip()
+
+
 def save_news(df: pd.DataFrame, path: Path = DEFAULT_DB_PATH) -> None:
-    """Append new news to archive (or create if first run)."""
+    """Append new news to archive. Preserves original timestamps (keep='first')."""
     ensure_data_dir(path)
     filepath = path / NEWS_CSV
     if filepath.exists():
@@ -27,7 +35,9 @@ def save_news(df: pd.DataFrame, path: Path = DEFAULT_DB_PATH) -> None:
         existing["published_at"] = pd.to_datetime(existing["published_at"], format="mixed", utc=True, errors="coerce")
         existing["fetched_at"] = pd.to_datetime(existing["fetched_at"], format="mixed", utc=True, errors="coerce")
         combined = pd.concat([existing, df], ignore_index=True)
-        combined = combined.drop_duplicates(subset=["title", "source", "url"], keep="last")
+        combined["_norm_title"] = combined["title"].apply(_normalize_title)
+        combined = combined.drop_duplicates(subset=["_norm_title", "source"], keep="first")
+        combined = combined.drop(columns=["_norm_title"], errors="ignore")
     else:
         combined = df
     combined.to_csv(filepath, index=False)

@@ -70,17 +70,39 @@ def _fetch_rss_raw(url: str) -> feedparser.FeedParserDict:
         return feedparser.parse(url)
 
 
-def _parse_published(entry) -> datetime:
-    """Extract published datetime from feed entry, always UTC-aware."""
+def _parse_published(entry) -> datetime | None:
+    """Extract published datetime from feed entry, always UTC-aware.
+
+    Returns None if no date can be parsed (caller decides what to do).
+    """
+    # Try struct_time fields first
     for attr in ("published_parsed", "updated_parsed"):
         parsed = getattr(entry, attr, None)
         if parsed:
             try:
                 dt = datetime(*parsed[:6], tzinfo=timezone.utc)
-                return dt
+                if dt.year >= 2020:
+                    return dt
             except (TypeError, ValueError):
                 continue
-    return _utcnow()
+
+    # Try raw string fields with dateutil
+    for attr in ("published", "updated", "date"):
+        raw = getattr(entry, attr, None) or entry.get(attr)
+        if raw and isinstance(raw, str):
+            try:
+                from dateutil import parser as dateutil_parser
+                dt = dateutil_parser.parse(raw)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                else:
+                    dt = dt.astimezone(timezone.utc)
+                if dt.year >= 2020:
+                    return dt
+            except Exception:
+                continue
+
+    return None
 
 
 def fetch_rss_feed(source_name: str, url: str) -> list[dict]:
@@ -90,6 +112,8 @@ def fetch_rss_feed(source_name: str, url: str) -> list[dict]:
         feed = _fetch_rss_raw(url)
         for entry in feed.entries[:25]:
             published = _parse_published(entry)
+            if published is None:
+                continue  # skip articles without a parseable date
 
             articles.append({
                 "source": source_name,
@@ -135,6 +159,9 @@ def fetch_trump_truth_social() -> list[dict]:
                     continue
 
                 published = _parse_published(entry)
+                if published is None:
+                    published = _utcnow()  # Trump posts are always current
+
                 articles.append({
                     "source": "Trump (Truth Social)",
                     "title": title[:300],
@@ -181,15 +208,22 @@ def fetch_all_news() -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame(all_articles)
-    df = df.drop_duplicates(subset=["title", "source"], keep="first")
 
-    # Drop articles older than 48 hours to keep the feed fresh
-    cutoff = _utcnow() - timedelta(hours=48)
+    # Normalize titles for robust dedup (case, whitespace, punctuation)
+    import re
+    df["_norm"] = df["title"].apply(lambda t: re.sub(r"[^a-z0-9 ]", "", str(t).lower()).strip() if isinstance(t, str) else "")
+    df = df.drop_duplicates(subset=["_norm", "source"], keep="first")
+    df = df[df["_norm"].str.len() > 10]  # drop empty/garbage titles
+    df = df.drop(columns=["_norm"])
+
+    # Drop articles with no parseable date or older than 48 hours
     df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
+    df = df.dropna(subset=["published_at"])
+    cutoff = _utcnow() - timedelta(hours=48)
     df = df[df["published_at"] >= cutoff]
 
     df = df.sort_values("published_at", ascending=False).reset_index(drop=True)
-    print(f"[News] Fetched {len(df)} articles ({len(trump_posts)} Trump posts)")
+    print(f"[News] Fetched {len(df)} fresh articles ({len(trump_posts)} Trump posts)")
     return df
 
 
