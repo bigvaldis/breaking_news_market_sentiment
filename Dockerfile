@@ -17,5 +17,7 @@ RUN cd frontend && npm install && npm run build && cd ..
 
 EXPOSE 10000
 ENV PORT=10000
-# -t 120: pipeline fetches 5 RSS feeds + sentiment analysis; can exceed 30s default
-CMD gunicorn -w 2 -b 0.0.0.0:${PORT} -t 120 api.app:app
+# Single worker: background threads handle pipeline + scheduler.
+# -t 120: RSS fetches can exceed the 30s default timeout.
+# --preload: import app once, not per-worker.
+CMD gunicorn -w 1 -b 0.0.0.0:${PORT} -t 120 --preload api.app:app

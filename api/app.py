@@ -428,7 +428,7 @@ def get_vix():
 
 @app.route("/api/health")
 def health():
-    """Health check with schedule info and freshness diagnostics."""
+    """Health check — responds instantly even during startup."""
     with _cache_lock:
         cache_updated = _market_cache["last_updated"]
 
@@ -440,6 +440,7 @@ def health():
 
     return jsonify({
         "status": "ok",
+        "startup_complete": _startup_done,
         "now_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "news_pipeline": {
             "last_run": news_last,
@@ -561,25 +562,44 @@ def _start_schedulers():
 
 
 # ---------------------------------------------------------------------------
-# Startup: populate caches only if stale (avoids duplicate work across workers)
+# Startup: all heavy work runs in a background thread so the app starts
+# instantly and responds to Render health checks without delay.
 # ---------------------------------------------------------------------------
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-_news_stale = _seconds_since_last_pipeline() > int(os.getenv("NEWS_PIPELINE_MINUTES", "60")) * 60
-_market_stale = _seconds_since_last_market_refresh() > int(os.getenv("MARKET_REFRESH_MINUTES", "15")) * 60
+_startup_done = False
 
-if _market_stale:
-    print("[Startup] Market cache is stale — refreshing")
-    _refresh_market_cache()
-else:
-    print(f"[Startup] Market cache is fresh ({_seconds_since_last_market_refresh():.0f}s old) — skipping")
 
-if _news_stale:
-    print("[Startup] News is stale — running pipeline")
-    _scheduled_news_pipeline()
-else:
-    print(f"[Startup] News is fresh ({_seconds_since_last_pipeline():.0f}s old) — skipping")
+def _background_startup():
+    """Run market refresh + news pipeline in background, then start schedulers.
 
-_start_schedulers()
+    Always refreshes the in-memory market cache (it's empty on process start).
+    Only re-runs the news pipeline if the on-disk data is stale.
+    """
+    global _startup_done
+    try:
+        news_interval = int(os.getenv("NEWS_PIPELINE_MINUTES", "60")) * 60
+
+        # Always refresh market cache — in-memory cache is empty on new process
+        print("[Startup] Refreshing market cache")
+        _refresh_market_cache()
+
+        if _seconds_since_last_pipeline() > news_interval:
+            print("[Startup] News is stale — running pipeline")
+            _scheduled_news_pipeline()
+        else:
+            print(f"[Startup] News is fresh ({_seconds_since_last_pipeline():.0f}s old)")
+
+        _startup_done = True
+        print("[Startup] Background init complete")
+    except Exception as e:
+        print(f"[Startup] Background init failed: {e}")
+        _startup_done = True
+
+    _start_schedulers()
+
+
+threading.Thread(target=_background_startup, daemon=True).start()
+print("[Startup] App ready — background init running")
 
 if __name__ == "__main__":
     app.run(debug=os.getenv("FLASK_DEBUG", "false").lower() == "true", host="0.0.0.0", port=int(os.getenv("PORT", 5001)))
