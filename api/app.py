@@ -256,19 +256,32 @@ def _clean_for_json(obj):
     return obj
 
 
-def _ensure_fresh_news():
-    """If the news pipeline hasn't run recently, run it now (lazy refresh).
+_bg_pipeline_running = False
 
-    This guarantees fresh news even when Render sleeps the service between
-    user visits, killing the APScheduler background thread.
+
+def _ensure_fresh_news():
+    """If the news pipeline hasn't run recently, trigger a background refresh.
+
+    Non-blocking: kicks off the pipeline in a thread so the user gets
+    whatever data exists immediately (stale is better than empty).
     """
+    global _bg_pipeline_running
     news_interval = int(os.getenv("NEWS_PIPELINE_MINUTES", "60")) * 60
     elapsed = _seconds_since_last_pipeline()
-    if elapsed > news_interval:
-        print(f"[Lazy refresh] News is {elapsed:.0f}s old (limit {news_interval}s) — running pipeline")
-        with _pipeline_lock:
-            if _seconds_since_last_pipeline() > news_interval:
-                run_pipeline(use_news_api=True)
+    if elapsed > news_interval and not _bg_pipeline_running:
+        print(f"[Lazy refresh] News is {elapsed:.0f}s old (limit {news_interval}s) — triggering background pipeline")
+        _bg_pipeline_running = True
+
+        def _bg():
+            global _bg_pipeline_running
+            try:
+                with _pipeline_lock:
+                    if _seconds_since_last_pipeline() > news_interval:
+                        run_pipeline(use_news_api=True)
+            finally:
+                _bg_pipeline_running = False
+
+        threading.Thread(target=_bg, daemon=True).start()
 
 
 def _ensure_fresh_markets():

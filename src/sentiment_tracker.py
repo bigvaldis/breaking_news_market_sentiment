@@ -62,14 +62,19 @@ def save_news(df: pd.DataFrame, path: Path = DEFAULT_DB_PATH) -> None:
 
 
 def load_news(path: Path = DEFAULT_DB_PATH) -> pd.DataFrame:
-    """Load latest pipeline results (for the news feed)."""
-    latest_path = path / NEWS_LATEST_CSV
-    if latest_path.exists():
-        df = pd.read_csv(latest_path)
-        for col in ["published_at", "fetched_at"]:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], format="mixed", utc=True, errors="coerce")
-        return df
+    """Load latest pipeline results (for the news feed).
+
+    Falls back to the archive if news_latest.csv hasn't been created yet
+    (e.g., first deploy after the two-file migration).
+    """
+    for filename in (NEWS_LATEST_CSV, NEWS_ARCHIVE_CSV):
+        fpath = path / filename
+        if fpath.exists() and fpath.stat().st_size > 100:
+            df = pd.read_csv(fpath)
+            for col in ["published_at", "fetched_at"]:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], format="mixed", utc=True, errors="coerce")
+            return df
 
     return pd.DataFrame()
 
